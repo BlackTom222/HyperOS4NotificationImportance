@@ -67,5 +67,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.3 >/dev/null 2>&1 || gh release create v1.0.3 --title "v1.0.3" --notes "修复 HyperOS 自定义控件不显示最低选项的问题：无法显示时会将‘低’直接写入最低等级；同时改用固定 Release 签名，后续版本可直接覆盖安装。由于此前版本使用临时签名，升级本版本仍需卸载旧版一次。"
-          gh release upload v1.0.3 artifacts/*.apk --clobber
+          gh release view v1.0.4 >/dev/null 2>&1 || gh release create v1.0.4 --title "v1.0.4" --notes "修复前台服务通知设置为‘低’后仍显示状态栏图标的问题。新增 System UI 作用域，低优先级通知将保留通知栏卡片但隐藏状态栏图标；同时加强设置页面的重要性写入。可直接覆盖安装 v1.0.3，安装后请在 LSPosed 中同时勾选‘设置’和‘系统界面’并重启手机。"
+          gh release upload v1.0.4 artifacts/*.apk --clobber

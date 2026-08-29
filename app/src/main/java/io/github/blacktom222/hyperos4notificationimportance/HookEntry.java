@@ -17,16 +17,122 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public final class HookEntry implements IXposedHookLoadPackage {
     private static final String TAG = "HyperOS4NotificationImportance";
     private static final String SETTINGS_PACKAGE = "com.android.settings";
+    private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
     private static final String IMPORTANCE_KEY = "importance";
+    private static boolean systemUiFilterLogged;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam loadPackageParam) {
-        if (!SETTINGS_PACKAGE.equals(loadPackageParam.packageName)) {
+        if (SETTINGS_PACKAGE.equals(loadPackageParam.packageName)) {
+            hookPreferenceVisibility(loadPackageParam.classLoader);
+            hookChannelPreferenceSetup(loadPackageParam.classLoader);
+            hookImportanceWrites();
             return;
         }
 
-        hookPreferenceVisibility(loadPackageParam.classLoader);
-        hookChannelPreferenceSetup(loadPackageParam.classLoader);
+        if (SYSTEM_UI_PACKAGE.equals(loadPackageParam.packageName)) {
+            hookSystemUiLowPriorityIcons(loadPackageParam.classLoader);
+        }
+    }
+
+    private static void hookImportanceWrites() {
+        try {
+            XposedHelpers.findAndHookMethod(
+                    NotificationChannel.class,
+                    "setImportance",
+                    int.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            if (param.args.length == 0
+                                    || !calledFromNotificationSettings()
+                                    || !Integer.valueOf(NotificationManager.IMPORTANCE_LOW)
+                                    .equals(param.args[0])) {
+                                return;
+                            }
+
+                            param.args[0] = NotificationManager.IMPORTANCE_MIN;
+                            log("已将设置页面的‘低’写入为最低等级");
+                        }
+                    });
+            log("已接管通知重要性写入");
+        } catch (Throwable throwable) {
+            log("接管通知重要性写入失败", throwable);
+        }
+    }
+
+    private static void hookSystemUiLowPriorityIcons(ClassLoader classLoader) {
+        try {
+            Class<?> iconAreaController = XposedHelpers.findClass(
+                    "com.android.systemui.statusbar.phone.NotificationIconAreaController",
+                    classLoader);
+
+            boolean hookedUpdate = !XposedBridge.hookAllMethods(
+                    iconAreaController,
+                    "updateStatusBarIcons",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            try {
+                                XposedHelpers.setBooleanField(
+                                        param.thisObject, "mShowLowPriority", false);
+                                logSystemUiFilterOnce();
+                            } catch (Throwable ignored) {
+                                // HyperOS may rename the field. The method hook below is the fallback.
+                            }
+                        }
+                    }).isEmpty();
+
+            boolean hookedFilter = !XposedBridge.hookAllMethods(
+                    iconAreaController,
+                    "shouldShowNotificationIcon",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            if (!isStatusBarIconPass(param.args) || param.args[0] == null) {
+                                return;
+                            }
+
+                            try {
+                                int importance = (Integer) XposedHelpers.callMethod(
+                                        param.args[0], "getImportance");
+                                if (importance < NotificationManager.IMPORTANCE_DEFAULT) {
+                                    param.setResult(false);
+                                    logSystemUiFilterOnce();
+                                }
+                            } catch (Throwable ignored) {
+                                // Keep System UI stable if a vendor NotificationEntry differs.
+                            }
+                        }
+                    }).isEmpty();
+
+            if (hookedUpdate || hookedFilter) {
+                log("已接管 System UI 低优先级通知图标");
+            } else {
+                log("System UI 中未找到状态栏图标刷新方法");
+            }
+        } catch (Throwable throwable) {
+            log("接管 System UI 状态栏图标失败", throwable);
+        }
+    }
+
+    private static boolean isStatusBarIconPass(Object[] args) {
+        if (args == null || args.length < 6) {
+            return false;
+        }
+
+        // AOD uses hideCurrentMedia=true; centered icons use hideDismissed=false.
+        return Boolean.FALSE.equals(args[1])
+                && Boolean.TRUE.equals(args[3])
+                && Boolean.TRUE.equals(args[4])
+                && Boolean.FALSE.equals(args[5]);
+    }
+
+    private static void logSystemUiFilterOnce() {
+        if (!systemUiFilterLogged) {
+            systemUiFilterLogged = true;
+            log("已隐藏低优先级通知的状态栏图标");
+        }
     }
 
     private static void hookPreferenceVisibility(ClassLoader classLoader) {
