@@ -2,6 +2,7 @@
 package io.github.blacktom222.hyperos4notificationimportance;
 
 import android.app.NotificationChannel;
+import android.app.NotificationManager;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -115,6 +116,7 @@ public final class HookEntry implements IXposedHookLoadPackage {
 
             XposedHelpers.callMethod(preference, "setVisible", true);
             setFieldIfPresent(fragment, "mImportance", preference);
+            ensureMinimumImportanceOption(preference);
 
             int backupImportance = XposedHelpers.getIntField(fragment, "mBackupImportance");
             if (backupImportance > 0) {
@@ -125,6 +127,39 @@ public final class HookEntry implements IXposedHookLoadPackage {
             XposedHelpers.callMethod(preference, "setOnPreferenceChangeListener", listener);
         } catch (Throwable throwable) {
             log("恢复通知重要性偏好失败", throwable);
+        }
+    }
+
+    private static void ensureMinimumImportanceOption(Object preference) {
+        try {
+            CharSequence[] entries = (CharSequence[])
+                    XposedHelpers.callMethod(preference, "getEntries");
+            CharSequence[] entryValues = (CharSequence[])
+                    XposedHelpers.callMethod(preference, "getEntryValues");
+            if (entries == null || entryValues == null || entries.length != entryValues.length) {
+                log("无法读取通知重要性列表");
+                return;
+            }
+
+            String minimumValue = String.valueOf(NotificationManager.IMPORTANCE_MIN);
+            for (CharSequence entryValue : entryValues) {
+                if (minimumValue.contentEquals(entryValue)) {
+                    return;
+                }
+            }
+
+            CharSequence[] updatedEntries = new CharSequence[entries.length + 1];
+            CharSequence[] updatedValues = new CharSequence[entryValues.length + 1];
+            System.arraycopy(entries, 0, updatedEntries, 0, entries.length);
+            System.arraycopy(entryValues, 0, updatedValues, 0, entryValues.length);
+            updatedEntries[entries.length] = "最低（不显示状态栏图标）";
+            updatedValues[entryValues.length] = minimumValue;
+
+            XposedHelpers.callMethod(preference, "setEntries", (Object) updatedEntries);
+            XposedHelpers.callMethod(preference, "setEntryValues", (Object) updatedValues);
+            log("已补充最低通知重要性选项");
+        } catch (Throwable throwable) {
+            log("补充最低通知重要性选项失败", throwable);
         }
     }
 
