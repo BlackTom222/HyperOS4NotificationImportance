@@ -2,6 +2,9 @@ plugins {
     id 'com.android.application'
 }
 
+def releaseStorePath = System.getenv('RELEASE_STORE_FILE')
+def releaseSigningPassword = System.getenv('RELEASE_SIGNING_PASSWORD')
+
 android {
     namespace 'io.github.blacktom222.hyperos4notificationimportance'
     compileSdk 35
@@ -10,14 +13,27 @@ android {
         applicationId 'io.github.blacktom222.hyperos4notificationimportance'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '1.0.2'
+        versionCode 4
+        versionName '1.0.3'
+    }
+
+    signingConfigs {
+        release {
+            if (releaseStorePath && releaseSigningPassword) {
+                storeFile file(releaseStorePath)
+                storePassword releaseSigningPassword
+                keyAlias 'hyperos4'
+                keyPassword releaseSigningPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            if (releaseStorePath && releaseSigningPassword) {
+                signingConfig signingConfigs.release
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
