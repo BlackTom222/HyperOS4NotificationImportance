@@ -4,12 +4,12 @@
 
 ## 使用方法
 
-1. 从 GitHub Actions 下载并安装 APK。
+1. 从 GitHub Releases 下载并安装 release APK。
 2. 在 LSPosed 中启用模块。
-3. 作用域只需勾选“设置”（`com.android.settings`）。
-4. 强行停止“设置”应用或重启手机。
+3. 作用域同时勾选“设置”（`com.android.settings`）和“系统界面”（`com.android.systemui`）。
+4. 重启手机。
 5. 打开“设置 → 通知与状态栏 → 应用通知管理 → 应用 → 具体通知类别”，调整通知重要性。
-6. 如出现“最低”，请选择“最低（不显示状态栏图标）”；若 HyperOS 自定义控件不显示该选项，模块会将“低”直接写入为最低等级，以隐藏状态栏图标。
+6. 选择“低”后，通知卡片仍会保留，低优先级通知的状态栏图标会由 System UI 过滤。
 
 ## 构建
 
@@ -25,7 +25,7 @@ gradle assembleDebug assembleRelease
 
 - 目标系统：Android 17 / HyperOS 4
 - 框架：LSPosed（兼容传统 Xposed API 82）
-- 作用域：`com.android.settings`
+- 作用域：`com.android.settings`、`com.android.systemui`
 
 不同系统版本可能调整内部类名。若选项仍未出现，请在 LSPosed 中导出模块日志并提交 Issue。
 
