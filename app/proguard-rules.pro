@@ -1,0 +1,1 @@
+-keep class io.github.blacktom222.hyperos4notificationimportance.HookEntry { *; }
