@@ -116,35 +116,34 @@ public final class HookEntry implements IXposedHookLoadPackage {
 
             XposedHelpers.callMethod(preference, "setVisible", true);
             setFieldIfPresent(fragment, "mImportance", preference);
-            ensureMinimumImportanceOption(preference);
+            boolean hasMinimumOption = ensureMinimumImportanceOption(preference);
 
             int backupImportance = XposedHelpers.getIntField(fragment, "mBackupImportance");
             if (backupImportance > 0) {
-                selectCurrentImportance(preference, backupImportance);
+                selectCurrentImportance(preference, backupImportance, hasMinimumOption);
             }
 
-            Object listener = createImportanceListener(fragment, classLoader);
+            Object listener = createImportanceListener(fragment, classLoader, hasMinimumOption);
             XposedHelpers.callMethod(preference, "setOnPreferenceChangeListener", listener);
         } catch (Throwable throwable) {
             log("恢复通知重要性偏好失败", throwable);
         }
     }
 
-    private static void ensureMinimumImportanceOption(Object preference) {
+    private static boolean ensureMinimumImportanceOption(Object preference) {
         try {
-            CharSequence[] entries = (CharSequence[])
-                    XposedHelpers.callMethod(preference, "getEntries");
-            CharSequence[] entryValues = (CharSequence[])
-                    XposedHelpers.callMethod(preference, "getEntryValues");
+            CharSequence[] entries = readCharSequenceArray(preference, "getEntries", "mEntries");
+            CharSequence[] entryValues = readCharSequenceArray(
+                    preference, "getEntryValues", "mEntryValues");
             if (entries == null || entryValues == null || entries.length != entryValues.length) {
                 log("无法读取通知重要性列表");
-                return;
+                return false;
             }
 
             String minimumValue = String.valueOf(NotificationManager.IMPORTANCE_MIN);
             for (CharSequence entryValue : entryValues) {
-                if (minimumValue.contentEquals(entryValue)) {
-                    return;
+                if (entryValue != null && minimumValue.contentEquals(entryValue)) {
+                    return true;
                 }
             }
 
@@ -157,18 +156,35 @@ public final class HookEntry implements IXposedHookLoadPackage {
 
             XposedHelpers.callMethod(preference, "setEntries", (Object) updatedEntries);
             XposedHelpers.callMethod(preference, "setEntryValues", (Object) updatedValues);
+            XposedHelpers.callMethod(preference, "notifyChanged");
             log("已补充最低通知重要性选项");
+            return true;
         } catch (Throwable throwable) {
             log("补充最低通知重要性选项失败", throwable);
+            return false;
         }
     }
 
-    private static void selectCurrentImportance(Object preference, int importance) {
+    private static CharSequence[] readCharSequenceArray(
+            Object preference, String getterName, String fieldName) {
         try {
+            return (CharSequence[]) XposedHelpers.callMethod(preference, getterName);
+        } catch (Throwable ignored) {
+            return (CharSequence[]) XposedHelpers.getObjectField(preference, fieldName);
+        }
+    }
+
+    private static void selectCurrentImportance(
+            Object preference, int importance, boolean hasMinimumOption) {
+        try {
+            int displayedImportance = importance;
+            if (!hasMinimumOption && importance == NotificationManager.IMPORTANCE_MIN) {
+                displayedImportance = NotificationManager.IMPORTANCE_LOW;
+            }
             Object result = XposedHelpers.callMethod(
                     preference,
                     "findSpinnerIndexOfValue",
-                    String.valueOf(importance));
+                    String.valueOf(displayedImportance));
             int index = (Integer) result;
             if (index >= 0) {
                 XposedHelpers.callMethod(preference, "setValueIndex", index);
@@ -178,7 +194,8 @@ public final class HookEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static Object createImportanceListener(Object fragment, ClassLoader classLoader)
+    private static Object createImportanceListener(
+            Object fragment, ClassLoader classLoader, boolean hasMinimumOption)
             throws ClassNotFoundException {
         Class<?> listenerClass = XposedHelpers.findClass(
                 "androidx.preference.Preference$OnPreferenceChangeListener",
@@ -192,7 +209,13 @@ public final class HookEntry implements IXposedHookLoadPackage {
                 }
 
                 try {
-                    int importance = Integer.parseInt(String.valueOf(args[1]));
+                    int selectedImportance = Integer.parseInt(String.valueOf(args[1]));
+                    int importance = selectedImportance;
+                    if (!hasMinimumOption
+                            && selectedImportance == NotificationManager.IMPORTANCE_LOW) {
+                        importance = NotificationManager.IMPORTANCE_MIN;
+                        log("系统控件不支持最低选项，已将‘低’映射为最低等级");
+                    }
                     setFieldIfPresent(fragment, "mBackupImportance", importance);
 
                     NotificationChannel channel = (NotificationChannel)
