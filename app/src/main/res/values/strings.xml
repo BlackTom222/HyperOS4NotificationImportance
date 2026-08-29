@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">HyperOS 4 通知重要性</string>
-    <string name="module_description">恢复 HyperOS 4 隐藏的通知渠道重要性设置</string>
+    <string name="module_description">恢复 HyperOS 4 隐藏的通知渠道重要性设置，并补充最低等级</string>
     <string name="installed_status">模块已安装</string>
-    <string name="instructions">使用方法：\n\n1. 在 LSPosed 中启用本模块\n2. 确认作用域为“设置（com.android.settings）”\n3. 强行停止“设置”应用或重启手机\n4. 进入应用通知设置并打开具体通知类别，即可调整通知重要性\n\n本模块不联网、不读取个人数据。</string>
+    <string name="instructions">使用方法：\n\n1. 在 LSPosed 中启用本模块\n2. 确认作用域为“设置（com.android.settings）”\n3. 强行停止“设置”应用或重启手机\n4. 进入应用通知设置并打开具体通知类别，即可调整通知重要性\n5. 如需隐藏状态栏图标，请选择“最低（不显示状态栏图标）”\n\n本模块不联网、不读取个人数据。</string>
 </resources>
