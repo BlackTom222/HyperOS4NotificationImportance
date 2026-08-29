@@ -35,7 +35,17 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Restore stable release signing key
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$RELEASE_KEYSTORE_BASE64"
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/hyperos4-release.keystore"
+
       - name: Build debug and release APKs
+        env:
+          RELEASE_STORE_FILE: ${{ runner.temp }}/hyperos4-release.keystore
+          RELEASE_SIGNING_PASSWORD: ${{ secrets.RELEASE_SIGNING_PASSWORD }}
         run: gradle --no-daemon clean assembleDebug assembleRelease lintRelease
 
       - name: Collect APKs
@@ -57,5 +67,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.2 >/dev/null 2>&1 || gh release create v1.0.2 --title "v1.0.2" --notes "补充‘最低（不显示状态栏图标）’通知重要性。Android 的‘低’等级只负责静音，仍可能显示状态栏图标。"
-          gh release upload v1.0.2 artifacts/*.apk --clobber
+          gh release view v1.0.3 >/dev/null 2>&1 || gh release create v1.0.3 --title "v1.0.3" --notes "修复 HyperOS 自定义控件不显示最低选项的问题：无法显示时会将‘低’直接写入最低等级；同时改用固定 Release 签名，后续版本可直接覆盖安装。由于此前版本使用临时签名，升级本版本仍需卸载旧版一次。"
+          gh release upload v1.0.3 artifacts/*.apk --clobber
