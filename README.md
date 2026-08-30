@@ -11,7 +11,7 @@
 5. 打开“设置 → 通知与状态栏 → 应用通知管理 → 应用 → 具体通知类别”，调整通知重要性。
 6. 选择“低”或“最低”后，通知卡片仍会保留，低优先级通知的状态栏图标会由 System UI 过滤；“中”及以上保持显示图标。
 
-v1.1.0 使用现代 libxposed API 102，在 System UI 创建图标前接管 `NotificationIconsInteractor` / `StackCoordinator`。只有最终 Ranking 为 `LOW(2)` 或 `MIN(1)` 的通知会被排除；不再全局关闭“静默通知图标”，因此 `DEFAULT(3)`（界面显示为“中”）不会再被误隐藏。通知卡片和前台服务保持不变，旧版 `NotificationIconAreaController` 仅作为兼容回退。
+v1.1.1 使用现代 libxposed API 102，在 System UI 创建图标前接管 `NotificationIconsInteractor` / `StackCoordinator`。模块会先允许静默通知进入状态栏图标候选列表，再根据最终 Ranking 精确判断：仅排除 `LOW(2)` 和 `MIN(1)`，并恢复 `DEFAULT(3)`（界面显示为“中”）及以上图标。通知卡片和前台服务保持不变，旧版 `NotificationIconAreaController` 仅作为兼容回退。
 
 模块应用首页通过 libxposed Service 显示激活状态、框架版本、API 版本、作用域以及运行中的目标进程。点击“授予 Root 权限并重启作用域”会请求一次 Root 权限，随后停止“设置”和“系统界面”进程，由系统自动重新拉起并加载新 Hook；Root 不用于其他操作。
 
@@ -19,7 +19,7 @@ v1.1.0 使用现代 libxposed API 102，在 System UI 创建图标前接管 `Not
 
 仓库每次推送都会通过 GitHub Actions 构建 debug 和使用固定密钥签名的 release APK。Actions 需要配置 `RELEASE_KEYSTORE_BASE64` 和 `RELEASE_SIGNING_PASSWORD` 两个仓库 Secret。
 
-也可以在本地使用 JDK 17 与 Gradle 8.11.1。若要生成已签名 release APK，需设置 `RELEASE_STORE_FILE` 与 `RELEASE_SIGNING_PASSWORD` 环境变量：
+也可以在本地使用 JDK 17 与 Gradle 9.5.1。若要生成已签名 release APK，需设置 `RELEASE_STORE_FILE` 与 `RELEASE_SIGNING_PASSWORD` 环境变量：
 
 ```bash
 gradle assembleDebug assembleRelease
