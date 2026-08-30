@@ -136,10 +136,11 @@ public final class HookEntry implements IXposedHookLoadPackage {
 
             Object notificationService = XposedHelpers.callStaticMethod(
                     NotificationManager.class, "getService");
+            int uid = (Integer) XposedHelpers.callMethod(notification, "getUid");
             NotificationChannel channel = queryNotificationChannel(
                     notificationService,
                     notification.getPackageName(),
-                    notification.getUid(),
+                    uid,
                     channelId);
             return channel != null
                     && channel.getImportance() <= NotificationManager.IMPORTANCE_LOW;
