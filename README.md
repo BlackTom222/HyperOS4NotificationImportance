@@ -1,6 +1,6 @@
 # HyperOS4NotificationImportance
 
-一个仅用于 HyperOS 4 的轻量 LSPosed 模块，用来恢复系统设置中被隐藏的通知渠道“通知重要性”选项，并补充“最低（不显示状态栏图标）”等级。
+一个仅用于 HyperOS 4 的轻量 LSPosed 模块，用来恢复系统设置中被隐藏的通知渠道“通知重要性”选项，并隐藏低优先级通知的状态栏图标。
 
 ## 使用方法
 
@@ -11,7 +11,7 @@
 5. 打开“设置 → 通知与状态栏 → 应用通知管理 → 应用 → 具体通知类别”，调整通知重要性。
 6. 选择“低”后，通知卡片仍会保留，低优先级通知的状态栏图标会由 System UI 过滤。
 
-v1.0.5 起直接在 `StatusBarIconView` 层按通知渠道的重要程度过滤图标，兼容 HyperOS 4 已移除 AOSP `NotificationIconAreaController` 的 System UI 实现。
+v1.0.6 起不再修改 `StatusBarIconView`，而是在 System UI 创建图标前接管 `NotificationIconsInteractor`。当状态栏图标集合中的通知最终 Ranking 为 `LOW(2)` 或 `MIN(1)` 时予以排除；通知卡片和前台服务保持不变。`StackCoordinator` 与旧版 `NotificationIconAreaController` 仅作为兼容回退。
 
 ## 构建
 
@@ -37,4 +37,4 @@ gradle assembleDebug assembleRelease
 
 ## 许可证与致谢
 
-本项目采用 GPL-3.0-or-later。通知重要性恢复思路参考了 GPL 项目 [Pengeek / CustoMIUIzer](https://github.com/monwf/customiuizer)。
+本项目采用 GPL-3.0-or-later。通知重要性与 System UI 过滤思路参考了 [HyperCeiler](https://github.com/ReChronoRain/HyperCeiler) 和 GPL 项目 [Pengeek / CustoMIUIzer](https://github.com/monwf/customiuizer)。
