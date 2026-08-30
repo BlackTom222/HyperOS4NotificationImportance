@@ -28,7 +28,9 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK platform
-        run: sdkmanager "platforms;android-37" "build-tools;37.0.0" --channel=3
+        run: |
+          sdkmanager "cmdline-tools;latest"
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;37.0.0" --channel=3
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
