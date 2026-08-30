@@ -7,7 +7,7 @@ def releaseSigningPassword = System.getenv('RELEASE_SIGNING_PASSWORD')
 
 android {
     namespace 'io.github.blacktom222.hyperos4notificationimportance'
-    compileSdk 35
+    compileSdk 37
 
     defaultConfig {
         applicationId 'io.github.blacktom222.hyperos4notificationimportance'
