@@ -67,5 +67,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.5 >/dev/null 2>&1 || gh release create v1.0.5 --title "v1.0.5" --notes "修复 HyperOS 4 中 AOSP NotificationIconAreaController 已不存在导致 System UI Hook 失败的问题。改为在 StatusBarIconView 层查询通知渠道重要程度并隐藏 LOW/MIN 状态栏图标，通知栏卡片保持显示。可直接覆盖安装 v1.0.4；请保持 LSPosed 作用域中的‘设置’和‘系统界面’均已勾选，并在安装后重启手机。"
-          gh release upload v1.0.5 artifacts/*.apk --clobber
+          gh release view v1.0.6 >/dev/null 2>&1 || gh release create v1.0.6 --title "v1.0.6" --notes "重写 HyperOS 4 状态栏通知图标过滤：参考 HyperCeiler 与 Pengeek/customiuizer，改在 NotificationIconsInteractor / StackCoordinator 管线中按最终通知 Ranking 过滤 LOW/MIN 图标，不再操作 StatusBarIconView，也不再把‘低’强制写成‘最低’。已有设置为‘低’的渠道无需重新选择。可直接覆盖安装 v1.0.5；安装后请确认 LSPosed 作用域包含‘设置’和‘系统界面’，然后重启手机。"
+          gh release upload v1.0.6 artifacts/*.apk --clobber
