@@ -67,5 +67,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.6 >/dev/null 2>&1 || gh release create v1.0.6 --title "v1.0.6" --notes "重写 HyperOS 4 状态栏通知图标过滤：参考 HyperCeiler 与 Pengeek/customiuizer，改在 NotificationIconsInteractor / StackCoordinator 管线中按最终通知 Ranking 过滤 LOW/MIN 图标，不再操作 StatusBarIconView，也不再把‘低’强制写成‘最低’。已有设置为‘低’的渠道无需重新选择。可直接覆盖安装 v1.0.5；安装后请确认 LSPosed 作用域包含‘设置’和‘系统界面’，然后重启手机。"
-          gh release upload v1.0.6 artifacts/*.apk --clobber
+          gh release view v1.1.0 >/dev/null 2>&1 || gh release create v1.1.0 --title "v1.1.0" --notes "迁移至现代 libxposed API 102，新增模块激活/作用域状态显示和 Root 一键重启作用域。修复‘中’重要性通知因静默策略被误隐藏的问题：现在仅过滤最终 Ranking 为 LOW(2) 或 MIN(1) 的状态栏图标。包名与固定签名保持不变，可直接覆盖安装 v1.0.6。"
+          gh release upload v1.1.0 artifacts/*.apk --clobber
