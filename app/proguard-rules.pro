@@ -1,1 +1,5 @@
--keep class io.github.blacktom222.hyperos4notificationimportance.HookEntry { *; }
+-dontwarn io.github.libxposed.annotation.**
+-adaptresourcefilecontents META-INF/xposed/java_init.list
+-keep,allowoptimization,allowobfuscation public class * extends io.github.libxposed.api.XposedModule {
+    public <init>();
+}
