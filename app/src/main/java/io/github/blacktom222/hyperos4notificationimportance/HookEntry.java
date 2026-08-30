@@ -3,6 +3,9 @@ package io.github.blacktom222.hyperos4notificationimportance;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.service.notification.StatusBarNotification;
+import android.view.View;
+import android.view.ViewParent;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -20,6 +23,7 @@ public final class HookEntry implements IXposedHookLoadPackage {
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
     private static final String IMPORTANCE_KEY = "importance";
     private static boolean systemUiFilterLogged;
+    private static boolean systemUiQueryErrorLogged;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam loadPackageParam) {
@@ -63,69 +67,143 @@ public final class HookEntry implements IXposedHookLoadPackage {
 
     private static void hookSystemUiLowPriorityIcons(ClassLoader classLoader) {
         try {
-            Class<?> iconAreaController = XposedHelpers.findClass(
-                    "com.android.systemui.statusbar.phone.NotificationIconAreaController",
+            Class<?> statusBarIconView = XposedHelpers.findClass(
+                    "com.android.systemui.statusbar.StatusBarIconView",
                     classLoader);
 
-            boolean hookedUpdate = !XposedBridge.hookAllMethods(
-                    iconAreaController,
-                    "updateStatusBarIcons",
+            boolean hookedVisibleState = !XposedBridge.hookAllMethods(
+                    statusBarIconView,
+                    "setVisibleState",
                     new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) {
-                            try {
-                                XposedHelpers.setBooleanField(
-                                        param.thisObject, "mShowLowPriority", false);
-                                logSystemUiFilterOnce();
-                            } catch (Throwable ignored) {
-                                // HyperOS may rename the field. The method hook below is the fallback.
-                            }
-                        }
-                    }).isEmpty();
-
-            boolean hookedFilter = !XposedBridge.hookAllMethods(
-                    iconAreaController,
-                    "shouldShowNotificationIcon",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            if (!isStatusBarIconPass(param.args) || param.args[0] == null) {
-                                return;
-                            }
-
-                            try {
-                                int importance = (Integer) XposedHelpers.callMethod(
-                                        param.args[0], "getImportance");
-                                if (importance < NotificationManager.IMPORTANCE_DEFAULT) {
-                                    param.setResult(false);
-                                    logSystemUiFilterOnce();
+                            if (param.args.length > 0
+                                    && shouldHideLowPriorityIcon(param.thisObject)) {
+                                param.args[0] = 2; // StatusBarIconView.STATE_HIDDEN
+                                if (param.args.length > 1 && param.args[1] instanceof Boolean) {
+                                    param.args[1] = false;
                                 }
-                            } catch (Throwable ignored) {
-                                // Keep System UI stable if a vendor NotificationEntry differs.
                             }
+                        }
+
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            hideViewIfNeeded(param.thisObject);
                         }
                     }).isEmpty();
 
-            if (hookedUpdate || hookedFilter) {
-                log("已接管 System UI 低优先级通知图标");
+            boolean hookedSet = !XposedBridge.hookAllMethods(
+                    statusBarIconView,
+                    "set",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            hideViewIfNeeded(param.thisObject);
+                        }
+                    }).isEmpty();
+
+            if (hookedVisibleState || hookedSet) {
+                log("已接管 System UI 的 StatusBarIconView");
             } else {
-                log("System UI 中未找到状态栏图标刷新方法");
+                log("StatusBarIconView 中未找到图标状态方法");
             }
         } catch (Throwable throwable) {
-            log("接管 System UI 状态栏图标失败", throwable);
+            log("接管 System UI StatusBarIconView 失败", throwable);
         }
     }
 
-    private static boolean isStatusBarIconPass(Object[] args) {
-        if (args == null || args.length < 6) {
-            return false;
+    private static void hideViewIfNeeded(Object iconView) {
+        if (!shouldHideLowPriorityIcon(iconView) || !(iconView instanceof View)) {
+            return;
         }
 
-        // AOD uses hideCurrentMedia=true; centered icons use hideDismissed=false.
-        return Boolean.FALSE.equals(args[1])
-                && Boolean.TRUE.equals(args[3])
-                && Boolean.TRUE.equals(args[4])
-                && Boolean.FALSE.equals(args[5]);
+        ((View) iconView).setVisibility(View.GONE);
+        logSystemUiFilterOnce();
+    }
+
+    private static boolean shouldHideLowPriorityIcon(Object iconView) {
+        try {
+            StatusBarNotification notification = (StatusBarNotification)
+                    XposedHelpers.callMethod(iconView, "getNotification");
+            if (notification == null || !isStatusBarArea((View) iconView)) {
+                return false;
+            }
+
+            String channelId = notification.getNotification().getChannelId();
+            if (channelId == null) {
+                return false;
+            }
+
+            Object notificationService = XposedHelpers.callStaticMethod(
+                    NotificationManager.class, "getService");
+            NotificationChannel channel = queryNotificationChannel(
+                    notificationService,
+                    notification.getPackageName(),
+                    notification.getUid(),
+                    channelId);
+            return channel != null
+                    && channel.getImportance() <= NotificationManager.IMPORTANCE_LOW;
+        } catch (Throwable throwable) {
+            if (!systemUiQueryErrorLogged) {
+                systemUiQueryErrorLogged = true;
+                log("查询状态栏图标对应通知渠道失败", throwable);
+            }
+            return false;
+        }
+    }
+
+    private static NotificationChannel queryNotificationChannel(
+            Object notificationService, String packageName, int uid, String channelId)
+            throws Throwable {
+        try {
+            return (NotificationChannel) XposedHelpers.callMethod(
+                    notificationService,
+                    "getNotificationChannelForPackage",
+                    packageName,
+                    uid,
+                    channelId,
+                    null,
+                    false);
+        } catch (Throwable ignored) {
+            return (NotificationChannel) XposedHelpers.callMethod(
+                    notificationService,
+                    "getNotificationChannelForPackage",
+                    packageName,
+                    uid,
+                    channelId,
+                    null);
+        }
+    }
+
+    private static boolean isStatusBarArea(View iconView) {
+        ViewParent parent = iconView.getParent();
+        boolean foundNotificationIconArea = false;
+        for (int depth = 0; depth < 6 && parent instanceof View; depth++) {
+            View parentView = (View) parent;
+            int id = parentView.getId();
+            if (id != View.NO_ID) {
+                try {
+                    String name = parentView.getResources().getResourceEntryName(id).toLowerCase();
+                    if (name.contains("aod")
+                            || name.contains("shelf")
+                            || name.contains("keyguard")
+                            || name.contains("lockscreen")) {
+                        return false;
+                    }
+                    if ((name.contains("notification") && name.contains("icon"))
+                            || name.contains("status_bar")) {
+                        foundNotificationIconArea = true;
+                    }
+                } catch (Throwable ignored) {
+                    // Resource names may be stripped in vendor builds.
+                }
+            }
+            parent = parentView.getParent();
+        }
+
+        // Unknown vendor containers are treated as the status-bar copy. Notification cards use
+        // a different icon view class, so the shade card itself remains intact.
+        return foundNotificationIconArea || iconView.isAttachedToWindow();
     }
 
     private static void logSystemUiFilterOnce() {
