@@ -8,6 +8,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -130,7 +131,10 @@ public final class HookEntry extends XposedModule {
             }
 
             Object[] args = chain.getArgs().toArray();
-            args[0] = false;
+            // On HyperOS this argument means "show silent status-bar icons".  The name of
+            // the interactor setter is misleading, and passing false kept DEFAULT channels
+            // out of the icon source even after the StackCoordinator filter had accepted them.
+            args[0] = true;
             logSilentPolicyOnce();
             return chain.proceed(args);
         };
@@ -152,7 +156,41 @@ public final class HookEntry extends XposedModule {
                 "onSilentStatusBarIconsVisibilityChanged",
                 classLoader,
                 forceShowSilentIcons);
+        hooked |= hookStatusBarNotificationIconsInteractor(classLoader);
         return hooked;
+    }
+
+    /**
+     * HyperOS builds which use the domain interactor keep the silent-icon setting in a
+     * MutableStateFlow supplied to the constructor.  This is the same source used by the
+     * final status-bar icon list, so update it before the interactor observes the value.
+     */
+    private boolean hookStatusBarNotificationIconsInteractor(ClassLoader classLoader) {
+        Class<?> interactorClass = findClassIfExists(
+                "com.android.systemui.statusbar.notification.icon.domain.interactor."
+                        + "StatusBarNotificationIconsInteractor",
+                classLoader);
+        if (interactorClass == null) {
+            return false;
+        }
+
+        return hookAllConstructors(interactorClass, chain -> {
+            Object[] args = chain.getArgs().toArray();
+            if (args.length > 2 && args[2] != null) {
+                try {
+                    Class<?> stateFlowKt = Class.forName(
+                            "kotlinx.coroutines.flow.StateFlowKt", false, classLoader);
+                    Object showSilentStatusIcons = callStaticMethod(
+                            stateFlowKt, "MutableStateFlow", Boolean.FALSE);
+                    setFieldValue(args[2], "showSilentStatusIcons", showSilentStatusIcons);
+                    logSilentPolicyOnce();
+                } catch (Throwable ignored) {
+                    // Constructor shapes differ between HyperOS releases. The listener hook
+                    // above remains a safe fallback when this dependency is not present.
+                }
+            }
+            return chain.proceed(args);
+        });
     }
 
     private boolean hookNotificationIconPredicate(ClassLoader classLoader) {
@@ -536,6 +574,22 @@ public final class HookEntry extends XposedModule {
             } catch (Throwable throwable) {
                 logError("Hook 方法失败: " + targetClass.getName() + "#" + methodName,
                         throwable);
+            }
+        }
+        return hooked;
+    }
+
+    private boolean hookAllConstructors(
+            Class<?> targetClass,
+            XposedInterface.Hooker hooker) {
+        boolean hooked = false;
+        for (Constructor<?> constructor : targetClass.getDeclaredConstructors()) {
+            try {
+                constructor.setAccessible(true);
+                hook(constructor).intercept(hooker);
+                hooked = true;
+            } catch (Throwable throwable) {
+                logError("Hook 构造方法失败: " + targetClass.getName(), throwable);
             }
         }
         return hooked;

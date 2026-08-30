@@ -11,7 +11,7 @@
 5. 打开“设置 → 通知与状态栏 → 应用通知管理 → 应用 → 具体通知类别”，调整通知重要性。
 6. 选择“低”或“最低”后，通知卡片仍会保留，低优先级通知的状态栏图标会由 System UI 过滤；“中”及以上保持显示图标。
 
-v1.1.2 使用现代 libxposed API 102，在 System UI 创建图标前接管 `NotificationIconsInteractor` / `StackCoordinator`。模块会先允许静默通知进入状态栏图标候选列表，再根据最终 Ranking 精确判断：仅排除 `LOW(2)` 和 `MIN(1)`。针对 HyperOS 4 仍把 `DEFAULT(3)`（界面显示为“中”）当作静默图标的第二层判定，v1.1.2 仅在状态栏图标管线中将其按 `HIGH(4)` 参与可见性计算，不修改通知通道的实际重要性，不会额外开启声音或悬浮通知。
+v1.1.3 使用现代 libxposed API 102，在 System UI 创建图标前接管 `NotificationIconsInteractor` / `StackCoordinator`。模块会先允许静默通知进入状态栏图标候选列表，再根据最终 Ranking 精确判断：仅排除 `LOW(2)` 和 `MIN(1)`。针对 HyperOS 4 仍把 `DEFAULT(3)`（界面显示为“中”）当作静默图标的第二层判定，v1.1.3 同时修正 HyperOS 的静默图标开关方向，并在新版 `StatusBarNotificationIconsInteractor` 构造时固定其图标来源；不修改通知通道的实际重要性，不会额外开启声音或悬浮通知。
 
 模块应用首页通过 libxposed Service 显示激活状态、框架版本、API 版本、作用域以及运行中的目标进程。点击“授予 Root 权限并重启作用域”会请求一次 Root 权限，随后停止“设置”和“系统界面”进程，由系统自动重新拉起并加载新 Hook；Root 不用于其他操作。
 
