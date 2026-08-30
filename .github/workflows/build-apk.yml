@@ -69,5 +69,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.1.0 >/dev/null 2>&1 || gh release create v1.1.0 --title "v1.1.0" --notes "迁移至现代 libxposed API 102，新增模块激活/作用域状态显示和 Root 一键重启作用域。修复‘中’重要性通知因静默策略被误隐藏的问题：现在仅过滤最终 Ranking 为 LOW(2) 或 MIN(1) 的状态栏图标。包名与固定签名保持不变，可直接覆盖安装 v1.0.6。"
-          gh release upload v1.1.0 artifacts/*.apk --clobber
+          gh release view v1.1.1 >/dev/null 2>&1 || gh release create v1.1.1 --title "v1.1.1" --notes "修复 HyperOS 自身静默图标策略仍会隐藏‘中’重要性图标的问题：先允许静默通知进入图标候选列表，再按最终 Ranking 精确过滤，仅隐藏 LOW(2) 和 MIN(1)，恢复 DEFAULT(3) 及以上图标。增加重要性写入与图标决策日志。沿用 API 102、固定包名和固定签名，可直接覆盖安装 v1.1.0。"
+          gh release upload v1.1.1 artifacts/*.apk --clobber
