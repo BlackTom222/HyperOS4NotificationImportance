@@ -11,6 +11,8 @@
 5. 打开“设置 → 通知与状态栏 → 应用通知管理 → 应用 → 具体通知类别”，调整通知重要性。
 6. 选择“低”后，通知卡片仍会保留，低优先级通知的状态栏图标会由 System UI 过滤。
 
+v1.0.5 起直接在 `StatusBarIconView` 层按通知渠道的重要程度过滤图标，兼容 HyperOS 4 已移除 AOSP `NotificationIconAreaController` 的 System UI 实现。
+
 ## 构建
 
 仓库每次推送都会通过 GitHub Actions 构建 debug 和使用固定密钥签名的 release APK。Actions 需要配置 `RELEASE_KEYSTORE_BASE64` 和 `RELEASE_SIGNING_PASSWORD` 两个仓库 Secret。
