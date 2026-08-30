@@ -3,210 +3,124 @@ package io.github.blacktom222.hyperos4notificationimportance;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.util.Log;
 
+import androidx.annotation.NonNull;
+
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
-import de.robv.android.xposed.IXposedHookLoadPackage;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import io.github.libxposed.api.XposedInterface;
+import io.github.libxposed.api.XposedModule;
 
-public final class HookEntry implements IXposedHookLoadPackage {
+public final class HookEntry extends XposedModule {
     private static final String TAG = "HyperOS4NotificationImportance";
     private static final String SETTINGS_PACKAGE = "com.android.settings";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
     private static final String IMPORTANCE_KEY = "importance";
-    private static boolean systemUiFilterLogged;
-    private static boolean systemUiSilentPolicyLogged;
-    private static boolean systemUiResolutionErrorLogged;
-    private static Object notificationCollection;
+
+    private boolean systemUiFilterLogged;
+    private Object notificationCollection;
 
     @Override
-    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam loadPackageParam) {
-        if (SETTINGS_PACKAGE.equals(loadPackageParam.packageName)) {
-            hookPreferenceVisibility(loadPackageParam.classLoader);
-            hookChannelPreferenceSetup(loadPackageParam.classLoader);
+    public void onModuleLoaded(@NonNull ModuleLoadedParam param) {
+        logInfo("API " + getApiVersion() + " 入口已加载，进程=" + param.getProcessName()
+                + "，框架=" + getFrameworkName() + "/" + getFrameworkVersionCode());
+    }
+
+    @Override
+    public void onPackageReady(@NonNull PackageReadyParam param) {
+        if (!param.isFirstPackage()) {
             return;
         }
 
-        if (SYSTEM_UI_PACKAGE.equals(loadPackageParam.packageName)) {
-            hookSystemUiLowPriorityIcons(loadPackageParam.classLoader);
+        String packageName = param.getPackageName();
+        ClassLoader classLoader = param.getClassLoader();
+        if (SETTINGS_PACKAGE.equals(packageName)) {
+            hookPreferenceVisibility(classLoader);
+            hookChannelPreferenceSetup(classLoader);
+        } else if (SYSTEM_UI_PACKAGE.equals(packageName)) {
+            hookSystemUiLowPriorityIcons(classLoader);
         }
     }
 
-    private static void hookSystemUiLowPriorityIcons(ClassLoader classLoader) {
-        boolean silentPolicyHooked = hookSilentIconPolicy(classLoader);
+    private void hookSystemUiLowPriorityIcons(ClassLoader classLoader) {
         boolean iconPredicateHooked = hookNotificationIconPredicate(classLoader);
-        boolean pipelineHooked = false;
+        boolean pipelineHooked = hookStackCoordinator(classLoader);
         boolean legacyHooked = false;
 
-        if (!silentPolicyHooked || !iconPredicateHooked) {
-            pipelineHooked = hookStackCoordinator(classLoader);
-        }
         if (!iconPredicateHooked && !pipelineHooked) {
             legacyHooked = hookLegacyNotificationIconController(classLoader);
         }
 
-        if (iconPredicateHooked && silentPolicyHooked) {
-            log("已接管 System UI 新版通知图标过滤管线");
-        } else if (pipelineHooked) {
-            log("已接管 System UI 的 StackCoordinator 兼容管线");
-        } else if (legacyHooked) {
-            log("已接管 System UI 旧版通知图标管线");
-        } else {
-            log("未找到可用的 System UI 通知图标过滤入口");
+        if (iconPredicateHooked) {
+            logInfo("已接管 System UI 新版通知图标过滤管线");
+        }
+        if (pipelineHooked) {
+            logInfo("已接管 System UI 的 StackCoordinator 兼容管线");
+        }
+        if (!iconPredicateHooked && !pipelineHooked && legacyHooked) {
+            logInfo("已接管 System UI 旧版通知图标管线");
+        } else if (!iconPredicateHooked && !pipelineHooked && !legacyHooked) {
+            logInfo("未找到可用的 System UI 通知图标过滤入口");
         }
     }
 
-    private static boolean hookSilentIconPolicy(ClassLoader classLoader) {
-        boolean hooked = false;
-        XC_MethodHook forceHideSilentIcons = new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(MethodHookParam param) {
-                if (param.args.length > 0 && param.args[0] instanceof Boolean) {
-                    param.args[0] = true;
-                    logSilentPolicyOnce();
-                }
-            }
-        };
-
-        hooked |= hookAllMethodsIfPresent(
-                "com.android.systemui.statusbar.domain.interactor."
-                        + "SilentNotificationStatusIconsVisibilityInteractor",
-                "setHideSilentStatusIcons",
-                classLoader,
-                forceHideSilentIcons);
-        hooked |= hookAllMethodsIfPresent(
-                "com.android.systemui.statusbar.notification.MiuiNotificationListener",
-                "onSilentStatusBarIconsVisibilityChanged",
-                classLoader,
-                forceHideSilentIcons);
-        hooked |= hookAllMethodsIfPresent(
-                "com.android.systemui.statusbar.NotificationListener",
-                "onSilentStatusBarIconsVisibilityChanged",
-                classLoader,
-                forceHideSilentIcons);
-
+    private boolean hookNotificationIconPredicate(ClassLoader classLoader) {
+        String className = "com.android.systemui.statusbar.notification.icon.domain.interactor."
+                + "NotificationIconsInteractor$filteredNotifSet$1$1";
         try {
-            Class<?> repositoryClass = XposedHelpers.findClassIfExists(
-                    "com.android.systemui.statusbar.data.repository."
-                            + "NotificationListenerSettingsRepository",
-                    classLoader);
-            if (repositoryClass != null) {
-                XposedBridge.hookAllConstructors(repositoryClass, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        forceShowSilentStatusIconsOff(param.thisObject);
-                    }
-                });
-                hooked = true;
-            }
-        } catch (Throwable throwable) {
-            log("接管静默通知图标设置仓库失败", throwable);
-        }
-
-        try {
-            Class<?> statusBarInteractor = XposedHelpers.findClassIfExists(
-                    "com.android.systemui.statusbar.notification.icon.domain.interactor."
-                            + "StatusBarNotificationIconsInteractor",
-                    classLoader);
-            if (statusBarInteractor != null) {
-                XposedBridge.hookAllConstructors(statusBarInteractor, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        for (Object argument : param.args) {
-                            if (argument != null && argument.getClass().getName().contains(
-                                    "NotificationListenerSettingsRepository")) {
-                                forceShowSilentStatusIconsOff(argument);
-                            }
-                        }
-                    }
-                });
-                hooked = true;
-            }
-        } catch (Throwable throwable) {
-            log("接管状态栏静默通知策略失败", throwable);
-        }
-
-        return hooked;
-    }
-
-    private static boolean hookNotificationIconPredicate(ClassLoader classLoader) {
-        try {
-            Class<?> predicateClass = XposedHelpers.findClassIfExists(
-                    "com.android.systemui.statusbar.notification.icon.domain.interactor."
-                            + "NotificationIconsInteractor$filteredNotifSet$1$1",
-                    classLoader);
+            Class<?> predicateClass = findClassIfExists(className, classLoader);
             if (predicateClass == null) {
                 return false;
             }
 
-            Set<XC_MethodHook.Unhook> hooks = XposedBridge.hookAllMethods(
-                    predicateClass,
-                    "invoke",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            if (!(param.getResult() instanceof Boolean)
-                                    || !Boolean.TRUE.equals(param.getResult())
-                                    || param.args.length == 0
-                                    || param.args[0] == null) {
-                                return;
-                            }
+            return hookAllMethods(predicateClass, "invoke", chain -> {
+                Object result = chain.proceed();
+                if (!Boolean.TRUE.equals(result) || chain.getArgs().isEmpty()) {
+                    return result;
+                }
 
-                            Boolean showLowPriority = readBooleanField(
-                                    param.thisObject, "$showLowPriority");
-                            if (!Boolean.FALSE.equals(showLowPriority)) {
-                                return;
-                            }
-
-                            Object notificationModel = param.args[0];
-                            Integer importance = resolveImportance(
-                                    notificationModel, classLoader);
-                            Boolean silent = resolveSilent(notificationModel);
-                            if ((importance != null
-                                    && importance <= NotificationManager.IMPORTANCE_LOW)
-                                    || Boolean.TRUE.equals(silent)) {
-                                param.setResult(false);
-                                logSystemUiFilterOnce();
-                            }
-                        }
-                    });
-            return !hooks.isEmpty();
+                Integer importance = resolveImportance(chain.getArg(0), classLoader);
+                if (importance != null && importance <= NotificationManager.IMPORTANCE_LOW) {
+                    logSystemUiFilterOnce();
+                    return false;
+                }
+                return result;
+            });
         } catch (Throwable throwable) {
-            log("接管 NotificationIconsInteractor 失败", throwable);
+            logError("接管 NotificationIconsInteractor 失败", throwable);
             return false;
         }
     }
 
-    private static boolean hookStackCoordinator(ClassLoader classLoader) {
-        XC_MethodHook filterRenderedList = new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(MethodHookParam param) {
-                if (param.args.length == 0 || !(param.args[0] instanceof List<?>)) {
-                    return;
-                }
+    private boolean hookStackCoordinator(ClassLoader classLoader) {
+        XposedInterface.Hooker filterRenderedList = chain -> {
+            if (chain.getArgs().isEmpty() || !(chain.getArg(0) instanceof List<?>)) {
+                return chain.proceed();
+            }
 
-                List<?> entries = (List<?>) param.args[0];
-                ArrayList<Object> filtered = new ArrayList<>(entries.size());
-                for (Object listEntry : entries) {
-                    Integer importance = resolveListEntryImportance(listEntry);
-                    if (importance == null
-                            || importance > NotificationManager.IMPORTANCE_LOW) {
-                        filtered.add(listEntry);
-                    }
-                }
-                if (filtered.size() != entries.size()) {
-                    param.args[0] = filtered;
-                    logSystemUiFilterOnce();
+            List<?> entries = (List<?>) chain.getArg(0);
+            ArrayList<Object> filtered = new ArrayList<>(entries.size());
+            for (Object listEntry : entries) {
+                Integer importance = resolveListEntryImportance(listEntry);
+                if (importance == null || importance > NotificationManager.IMPORTANCE_LOW) {
+                    filtered.add(listEntry);
                 }
             }
+            if (filtered.size() == entries.size()) {
+                return chain.proceed();
+            }
+
+            Object[] args = chain.getArgs().toArray();
+            args[0] = filtered;
+            logSystemUiFilterOnce();
+            return chain.proceed(args);
         };
 
         if (hookAllMethodsIfPresent(
@@ -225,332 +139,257 @@ public final class HookEntry implements IXposedHookLoadPackage {
                 filterRenderedList);
     }
 
-    private static boolean hookLegacyNotificationIconController(ClassLoader classLoader) {
+    private boolean hookLegacyNotificationIconController(ClassLoader classLoader) {
         try {
-            Class<?> controllerClass = XposedHelpers.findClassIfExists(
+            Class<?> controllerClass = findClassIfExists(
                     "com.android.systemui.statusbar.phone.NotificationIconAreaController",
                     classLoader);
             if (controllerClass == null) {
                 return false;
             }
 
-            Set<XC_MethodHook.Unhook> hooks = XposedBridge.hookAllMethods(
-                    controllerClass,
-                    "updateStatusBarIcons",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            Object entriesObject;
-                            try {
-                                entriesObject = XposedHelpers.getObjectField(
-                                        param.thisObject, "mNotificationEntries");
-                            } catch (Throwable ignored) {
-                                return;
-                            }
-                            if (!(entriesObject instanceof List<?>)) {
-                                return;
-                            }
+            return hookAllMethods(controllerClass, "updateStatusBarIcons", chain -> {
+                Object entriesObject;
+                try {
+                    entriesObject = getFieldValue(chain.getThisObject(), "mNotificationEntries");
+                } catch (Throwable ignored) {
+                    return chain.proceed();
+                }
+                if (!(entriesObject instanceof List<?>)) {
+                    return chain.proceed();
+                }
 
-                            List<?> entries = (List<?>) entriesObject;
-                            ArrayList<Object> filtered = new ArrayList<>(entries.size());
-                            for (Object listEntry : entries) {
-                                Integer importance = resolveListEntryImportance(listEntry);
-                                if (importance == null
-                                        || importance > NotificationManager.IMPORTANCE_LOW) {
-                                    filtered.add(listEntry);
-                                }
-                            }
-                            if (filtered.size() != entries.size()) {
-                                XposedHelpers.setObjectField(
-                                        param.thisObject, "mNotificationEntries", filtered);
-                                logSystemUiFilterOnce();
-                            }
-                        }
-                    });
-            return !hooks.isEmpty();
+                List<?> entries = (List<?>) entriesObject;
+                ArrayList<Object> filtered = new ArrayList<>(entries.size());
+                for (Object listEntry : entries) {
+                    Integer importance = resolveListEntryImportance(listEntry);
+                    if (importance == null || importance > NotificationManager.IMPORTANCE_LOW) {
+                        filtered.add(listEntry);
+                    }
+                }
+                if (filtered.size() != entries.size()) {
+                    setFieldValue(chain.getThisObject(), "mNotificationEntries", filtered);
+                    logSystemUiFilterOnce();
+                }
+                return chain.proceed();
+            });
         } catch (Throwable throwable) {
-            log("接管旧版通知图标管线失败", throwable);
+            logError("接管旧版通知图标管线失败", throwable);
             return false;
         }
     }
 
-    private static boolean hookAllMethodsIfPresent(
-            String className,
-            String methodName,
-            ClassLoader classLoader,
-            XC_MethodHook hook) {
-        try {
-            Class<?> targetClass = XposedHelpers.findClassIfExists(className, classLoader);
-            return targetClass != null
-                    && !XposedBridge.hookAllMethods(targetClass, methodName, hook).isEmpty();
-        } catch (Throwable throwable) {
-            return false;
-        }
-    }
-
-    private static void forceShowSilentStatusIconsOff(Object repository) {
-        try {
-            Object flow;
-            try {
-                flow = XposedHelpers.getObjectField(repository, "showSilentStatusIcons");
-            } catch (Throwable ignored) {
-                flow = XposedHelpers.callMethod(repository, "getShowSilentStatusIcons");
-            }
-            XposedHelpers.callMethod(flow, "setValue", false);
-            logSilentPolicyOnce();
-        } catch (Throwable throwable) {
-            if (!systemUiResolutionErrorLogged) {
-                systemUiResolutionErrorLogged = true;
-                log("关闭静默通知状态栏图标失败", throwable);
-            }
-        }
-    }
-
-    private static Integer resolveImportance(Object notificationModel, ClassLoader classLoader) {
+    private Integer resolveImportance(Object notificationModel, ClassLoader classLoader) {
         Integer directImportance = readImportance(notificationModel);
         if (directImportance != null) {
             return directImportance;
         }
 
         try {
-            String key;
+            Object keyValue;
             try {
-                key = String.valueOf(XposedHelpers.getObjectField(notificationModel, "key"));
+                keyValue = getFieldValue(notificationModel, "key");
             } catch (Throwable ignored) {
-                key = String.valueOf(XposedHelpers.callMethod(notificationModel, "getKey"));
+                keyValue = callMethod(notificationModel, "getKey");
             }
-            if (key == null || "null".equals(key)) {
+            String key = String.valueOf(keyValue);
+            if ("null".equals(key)) {
                 return null;
             }
 
             Object collection = getNotificationCollection(classLoader);
-            Object entry = collection == null
-                    ? null
-                    : XposedHelpers.callMethod(collection, "getEntry", key);
+            Object entry = collection == null ? null : callMethod(collection, "getEntry", key);
             return readImportance(entry);
-        } catch (Throwable throwable) {
+        } catch (Throwable ignored) {
             return null;
         }
     }
 
-    private static Object getNotificationCollection(ClassLoader classLoader) {
+    private Object getNotificationCollection(ClassLoader classLoader) {
         if (notificationCollection != null) {
             return notificationCollection;
         }
         try {
-            Class<?> dependencyClass = XposedHelpers.findClass(
-                    "com.android.systemui.Dependency", classLoader);
-            Class<?> helperClass = XposedHelpers.findClass(
+            Class<?> dependencyClass = Class.forName(
+                    "com.android.systemui.Dependency", false, classLoader);
+            Class<?> helperClass = Class.forName(
                     "com.android.systemui.statusbar.policy.DismissNotificationHelper",
+                    false,
                     classLoader);
-            Object helper = XposedHelpers.callStaticMethod(
-                    dependencyClass, "get", helperClass);
-            notificationCollection = XposedHelpers.getObjectField(helper, "notifCollection");
-        } catch (Throwable throwable) {
+            Object helper = callStaticMethod(dependencyClass, "get", helperClass);
+            notificationCollection = getFieldValue(helper, "notifCollection");
+        } catch (Throwable ignored) {
             return null;
         }
         return notificationCollection;
     }
 
-    private static Integer resolveListEntryImportance(Object listEntry) {
+    private Integer resolveListEntryImportance(Object listEntry) {
         if (listEntry == null) {
             return null;
         }
         try {
-            Object entry = XposedHelpers.callMethod(listEntry, "getRepresentativeEntry");
-            return readImportance(entry);
+            return readImportance(callMethod(listEntry, "getRepresentativeEntry"));
         } catch (Throwable ignored) {
             return readImportance(listEntry);
         }
     }
 
-    private static Integer readImportance(Object object) {
+    private Integer readImportance(Object object) {
         if (object == null) {
             return null;
         }
         try {
             Object ranking;
             try {
-                ranking = XposedHelpers.getObjectField(object, "mRanking");
+                ranking = getFieldValue(object, "mRanking");
             } catch (Throwable ignored) {
-                ranking = XposedHelpers.callMethod(object, "getRanking");
+                ranking = callMethod(object, "getRanking");
             }
-            return (Integer) XposedHelpers.callMethod(ranking, "getImportance");
+            return (Integer) callMethod(ranking, "getImportance");
         } catch (Throwable ignored) {
             try {
-                return (Integer) XposedHelpers.callMethod(object, "getImportance");
+                return (Integer) callMethod(object, "getImportance");
             } catch (Throwable ignoredAgain) {
                 return null;
             }
         }
     }
 
-    private static Boolean resolveSilent(Object notificationModel) {
+    private void hookPreferenceVisibility(ClassLoader classLoader) {
         try {
-            return (Boolean) XposedHelpers.callMethod(notificationModel, "isSilent");
-        } catch (Throwable ignored) {
-            return readBooleanField(notificationModel, "isSilent");
-        }
-    }
-
-    private static Boolean readBooleanField(Object object, String fieldName) {
-        try {
-            return XposedHelpers.getBooleanField(object, fieldName);
-        } catch (Throwable ignored) {
-            try {
-                Object value = XposedHelpers.getObjectField(object, fieldName);
-                return value instanceof Boolean ? (Boolean) value : null;
-            } catch (Throwable ignoredAgain) {
-                return null;
-            }
-        }
-    }
-
-    private static void logSilentPolicyOnce() {
-        if (!systemUiSilentPolicyLogged) {
-            systemUiSilentPolicyLogged = true;
-            log("已关闭静默通知的状态栏图标显示策略");
-        }
-    }
-
-    private static void logSystemUiFilterOnce() {
-        if (!systemUiFilterLogged) {
-            systemUiFilterLogged = true;
-            log("已隐藏低优先级通知的状态栏图标");
-        }
-    }
-
-    private static void hookPreferenceVisibility(ClassLoader classLoader) {
-        try {
-            Class<?> baseSettings = XposedHelpers.findClass(
+            Class<?> baseSettings = Class.forName(
                     "com.android.settings.notification.BaseNotificationSettings",
+                    false,
                     classLoader);
-
-            XposedBridge.hookAllMethods(baseSettings, "setPrefVisible", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    if (param.args.length < 2 || param.args[0] == null) {
-                        return;
-                    }
-
-                    Object key = XposedHelpers.callMethod(param.args[0], "getKey");
-                    if (IMPORTANCE_KEY.equals(key)) {
-                        param.args[1] = true;
-                    }
+            if (!hookAllMethods(baseSettings, "setPrefVisible", chain -> {
+                if (chain.getArgs().size() < 2 || chain.getArg(0) == null) {
+                    return chain.proceed();
                 }
-            });
-            log("已接管通知重要性选项的可见性");
+
+                Object key = callMethod(chain.getArg(0), "getKey");
+                if (!IMPORTANCE_KEY.equals(key)) {
+                    return chain.proceed();
+                }
+                Object[] args = chain.getArgs().toArray();
+                args[1] = true;
+                return chain.proceed(args);
+            })) {
+                throw new NoSuchMethodException("setPrefVisible");
+            }
+            logInfo("已接管通知重要性选项的可见性");
         } catch (Throwable throwable) {
-            log("未找到 BaseNotificationSettings#setPrefVisible", throwable);
+            logError("未找到 BaseNotificationSettings#setPrefVisible", throwable);
             hookAndroidXVisibilityFallback(classLoader);
         }
     }
 
-    private static void hookAndroidXVisibilityFallback(ClassLoader classLoader) {
+    private void hookAndroidXVisibilityFallback(ClassLoader classLoader) {
         try {
-            Class<?> preference = XposedHelpers.findClass("androidx.preference.Preference", classLoader);
-            XposedHelpers.findAndHookMethod(preference, "setVisible", boolean.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            if (!Boolean.FALSE.equals(param.args[0])) {
-                                return;
-                            }
-                            Object key = XposedHelpers.callMethod(param.thisObject, "getKey");
-                            if (IMPORTANCE_KEY.equals(key) && calledFromNotificationSettings()) {
-                                param.args[0] = true;
-                            }
-                        }
-                    });
-            log("已启用 AndroidX 可见性兼容方案");
+            Class<?> preference = Class.forName(
+                    "androidx.preference.Preference", false, classLoader);
+            Method setVisible = preference.getDeclaredMethod("setVisible", boolean.class);
+            hook(setVisible).intercept(chain -> {
+                if (!Boolean.FALSE.equals(chain.getArg(0))) {
+                    return chain.proceed();
+                }
+                Object key = callMethod(chain.getThisObject(), "getKey");
+                if (!IMPORTANCE_KEY.equals(key) || !calledFromNotificationSettings()) {
+                    return chain.proceed();
+                }
+                return chain.proceed(new Object[]{true});
+            });
+            logInfo("已启用 AndroidX 可见性兼容方案");
         } catch (Throwable throwable) {
-            log("AndroidX 可见性兼容方案不可用", throwable);
+            logError("AndroidX 可见性兼容方案不可用", throwable);
         }
     }
 
-    private static boolean calledFromNotificationSettings() {
+    private boolean calledFromNotificationSettings() {
         for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
-            String className = element.getClassName();
-            if (className.startsWith("com.android.settings.notification.")) {
+            if (element.getClassName().startsWith("com.android.settings.notification.")) {
                 return true;
             }
         }
         return false;
     }
 
-    private static void hookChannelPreferenceSetup(ClassLoader classLoader) {
+    private void hookChannelPreferenceSetup(ClassLoader classLoader) {
         try {
-            Class<?> channelSettings = XposedHelpers.findClass(
+            Class<?> channelSettings = Class.forName(
                     "com.android.settings.notification.ChannelNotificationSettings",
+                    false,
                     classLoader);
-
-            XposedBridge.hookAllMethods(channelSettings, "setupChannelDefaultPrefs",
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            restoreImportancePreference(param.thisObject, classLoader);
-                        }
-                    });
-            log("已接管通知渠道重要性设置");
+            if (!hookAllMethods(channelSettings, "setupChannelDefaultPrefs", chain -> {
+                Object result = chain.proceed();
+                restoreImportancePreference(chain.getThisObject(), classLoader);
+                return result;
+            })) {
+                throw new NoSuchMethodException("setupChannelDefaultPrefs");
+            }
+            logInfo("已接管通知渠道重要性设置");
         } catch (Throwable throwable) {
-            log("未找到 ChannelNotificationSettings#setupChannelDefaultPrefs", throwable);
+            logError("未找到 ChannelNotificationSettings#setupChannelDefaultPrefs", throwable);
         }
     }
 
-    private static void restoreImportancePreference(Object fragment, ClassLoader classLoader) {
+    private void restoreImportancePreference(Object fragment, ClassLoader classLoader) {
         try {
-            Object preference = XposedHelpers.callMethod(fragment, "findPreference", IMPORTANCE_KEY);
+            Object preference = callMethod(fragment, "findPreference", IMPORTANCE_KEY);
             if (preference == null) {
-                log("当前通知渠道页面不包含 importance 偏好");
+                logInfo("当前通知渠道页面不包含 importance 偏好");
                 return;
             }
 
-            XposedHelpers.callMethod(preference, "setVisible", true);
+            callMethod(preference, "setVisible", true);
             setFieldIfPresent(fragment, "mImportance", preference);
 
-            int backupImportance = XposedHelpers.getIntField(fragment, "mBackupImportance");
+            int backupImportance = ((Number) getFieldValue(
+                    fragment, "mBackupImportance")).intValue();
             if (backupImportance > 0) {
                 selectCurrentImportance(preference, backupImportance);
             }
 
             Object listener = createImportanceListener(fragment, classLoader);
-            XposedHelpers.callMethod(preference, "setOnPreferenceChangeListener", listener);
+            callMethod(preference, "setOnPreferenceChangeListener", listener);
         } catch (Throwable throwable) {
-            log("恢复通知重要性偏好失败", throwable);
+            logError("恢复通知重要性偏好失败", throwable);
         }
     }
 
-    private static void selectCurrentImportance(Object preference, int importance) {
+    private void selectCurrentImportance(Object preference, int importance) {
         try {
-            Object result = XposedHelpers.callMethod(
+            int index = ((Number) callMethod(
                     preference,
                     "findSpinnerIndexOfValue",
-                    String.valueOf(importance));
-            int index = (Integer) result;
+                    String.valueOf(importance))).intValue();
             if (index < 0 && importance == NotificationManager.IMPORTANCE_MIN) {
-                index = (Integer) XposedHelpers.callMethod(
+                index = ((Number) callMethod(
                         preference,
                         "findSpinnerIndexOfValue",
-                        String.valueOf(NotificationManager.IMPORTANCE_LOW));
+                        String.valueOf(NotificationManager.IMPORTANCE_LOW))).intValue();
             }
             if (index >= 0) {
-                XposedHelpers.callMethod(preference, "setValueIndex", index);
+                callMethod(preference, "setValueIndex", index);
             }
         } catch (Throwable throwable) {
-            log("同步当前通知重要性失败", throwable);
+            logError("同步当前通知重要性失败", throwable);
         }
     }
 
-    private static Object createImportanceListener(Object fragment, ClassLoader classLoader)
+    private Object createImportanceListener(Object fragment, ClassLoader classLoader)
             throws ClassNotFoundException {
-        Class<?> listenerClass = XposedHelpers.findClass(
+        Class<?> listenerClass = Class.forName(
                 "androidx.preference.Preference$OnPreferenceChangeListener",
+                false,
                 classLoader);
 
         InvocationHandler handler = new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) {
-                if (!"onPreferenceChange".equals(method.getName()) || args == null || args.length < 2) {
+                if (!"onPreferenceChange".equals(method.getName())
+                        || args == null
+                        || args.length < 2) {
                     return true;
                 }
 
@@ -558,19 +397,19 @@ public final class HookEntry implements IXposedHookLoadPackage {
                     int importance = Integer.parseInt(String.valueOf(args[1]));
                     setFieldIfPresent(fragment, "mBackupImportance", importance);
 
-                    NotificationChannel channel = (NotificationChannel)
-                            XposedHelpers.getObjectField(fragment, "mChannel");
+                    NotificationChannel channel = (NotificationChannel) getFieldValue(
+                            fragment, "mChannel");
                     channel.setImportance(importance);
-                    XposedHelpers.callMethod(channel, "lockFields", 4);
+                    callMethod(channel, "lockFields", 4);
 
-                    Object backend = XposedHelpers.getObjectField(fragment, "mBackend");
-                    String packageName = (String) XposedHelpers.getObjectField(fragment, "mPkg");
-                    int uid = XposedHelpers.getIntField(fragment, "mUid");
-                    XposedHelpers.callMethod(backend, "updateChannel", packageName, uid, channel);
-                    XposedHelpers.callMethod(fragment, "updateDependents", false);
+                    Object backend = getFieldValue(fragment, "mBackend");
+                    String packageName = (String) getFieldValue(fragment, "mPkg");
+                    int uid = ((Number) getFieldValue(fragment, "mUid")).intValue();
+                    callMethod(backend, "updateChannel", packageName, uid, channel);
+                    callMethod(fragment, "updateDependents", false);
                     return true;
                 } catch (Throwable throwable) {
-                    log("保存通知重要性失败", throwable);
+                    logError("保存通知重要性失败", throwable);
                     return false;
                 }
             }
@@ -579,28 +418,173 @@ public final class HookEntry implements IXposedHookLoadPackage {
         return Proxy.newProxyInstance(classLoader, new Class<?>[]{listenerClass}, handler);
     }
 
-    private static void setFieldIfPresent(Object object, String fieldName, Object value) {
+    private boolean hookAllMethodsIfPresent(
+            String className,
+            String methodName,
+            ClassLoader classLoader,
+            XposedInterface.Hooker hooker) {
+        Class<?> targetClass = findClassIfExists(className, classLoader);
+        return targetClass != null && hookAllMethods(targetClass, methodName, hooker);
+    }
+
+    private boolean hookAllMethods(
+            Class<?> targetClass,
+            String methodName,
+            XposedInterface.Hooker hooker) {
+        boolean hooked = false;
+        for (Method method : targetClass.getDeclaredMethods()) {
+            if (!methodName.equals(method.getName())) {
+                continue;
+            }
+            try {
+                method.setAccessible(true);
+                hook(method).intercept(hooker);
+                hooked = true;
+            } catch (Throwable throwable) {
+                logError("Hook 方法失败: " + targetClass.getName() + "#" + methodName,
+                        throwable);
+            }
+        }
+        return hooked;
+    }
+
+    private static Class<?> findClassIfExists(String className, ClassLoader classLoader) {
         try {
-            XposedHelpers.setObjectField(object, fieldName, value);
-        } catch (Throwable throwable) {
-            log("字段不存在: " + fieldName, throwable);
+            return Class.forName(className, false, classLoader);
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
-    private static void setFieldIfPresent(Object object, String fieldName, int value) {
+    private static Object getFieldValue(Object object, String fieldName)
+            throws ReflectiveOperationException {
+        Field field = findField(object.getClass(), fieldName);
+        return field.get(object);
+    }
+
+    private static void setFieldValue(Object object, String fieldName, Object value)
+            throws ReflectiveOperationException {
+        Field field = findField(object.getClass(), fieldName);
+        field.set(object, value);
+    }
+
+    private static Field findField(Class<?> type, String fieldName) throws NoSuchFieldException {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                Field field = current.getDeclaredField(fieldName);
+                field.setAccessible(true);
+                return field;
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(type.getName() + "." + fieldName);
+    }
+
+    private static Object callMethod(Object object, String methodName, Object... args)
+            throws ReflectiveOperationException {
+        Method method = findCompatibleMethod(object.getClass(), methodName, args);
+        return invoke(method, object, args);
+    }
+
+    private static Object callStaticMethod(Class<?> type, String methodName, Object... args)
+            throws ReflectiveOperationException {
+        Method method = findCompatibleMethod(type, methodName, args);
+        return invoke(method, null, args);
+    }
+
+    private static Object invoke(Method method, Object receiver, Object[] args)
+            throws ReflectiveOperationException {
         try {
-            XposedHelpers.setIntField(object, fieldName, value);
-        } catch (Throwable throwable) {
-            log("字段不存在: " + fieldName, throwable);
+            method.setAccessible(true);
+            return method.invoke(receiver, args);
+        } catch (InvocationTargetException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof ReflectiveOperationException) {
+                throw (ReflectiveOperationException) cause;
+            }
+            throw exception;
         }
     }
 
-    private static void log(String message) {
-        XposedBridge.log(TAG + ": " + message);
+    private static Method findCompatibleMethod(Class<?> type, String methodName, Object[] args)
+            throws NoSuchMethodException {
+        Class<?> current = type;
+        while (current != null) {
+            for (Method method : current.getDeclaredMethods()) {
+                if (methodName.equals(method.getName())
+                        && parametersMatch(method.getParameterTypes(), args)) {
+                    return method;
+                }
+            }
+            current = current.getSuperclass();
+        }
+        for (Method method : type.getMethods()) {
+            if (methodName.equals(method.getName())
+                    && parametersMatch(method.getParameterTypes(), args)) {
+                return method;
+            }
+        }
+        throw new NoSuchMethodException(type.getName() + "#" + methodName);
     }
 
-    private static void log(String message, Throwable throwable) {
-        XposedBridge.log(TAG + ": " + message);
-        XposedBridge.log(throwable);
+    private static boolean parametersMatch(Class<?>[] parameterTypes, Object[] args) {
+        if (parameterTypes.length != args.length) {
+            return false;
+        }
+        for (int index = 0; index < parameterTypes.length; index++) {
+            Object argument = args[index];
+            if (argument == null) {
+                if (parameterTypes[index].isPrimitive()) {
+                    return false;
+                }
+                continue;
+            }
+            if (!box(parameterTypes[index]).isAssignableFrom(argument.getClass())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Class<?> box(Class<?> type) {
+        if (!type.isPrimitive()) return type;
+        if (type == boolean.class) return Boolean.class;
+        if (type == byte.class) return Byte.class;
+        if (type == char.class) return Character.class;
+        if (type == short.class) return Short.class;
+        if (type == int.class) return Integer.class;
+        if (type == long.class) return Long.class;
+        if (type == float.class) return Float.class;
+        if (type == double.class) return Double.class;
+        return Void.class;
+    }
+
+    private void setFieldIfPresent(Object object, String fieldName, Object value) {
+        try {
+            setFieldValue(object, fieldName, value);
+        } catch (Throwable throwable) {
+            logError("字段不存在: " + fieldName, throwable);
+        }
+    }
+
+    private void setFieldIfPresent(Object object, String fieldName, int value) {
+        setFieldIfPresent(object, fieldName, Integer.valueOf(value));
+    }
+
+    private void logSystemUiFilterOnce() {
+        if (!systemUiFilterLogged) {
+            systemUiFilterLogged = true;
+            logInfo("已隐藏 LOW/MIN 通知的状态栏图标");
+        }
+    }
+
+    private void logInfo(String message) {
+        log(Log.INFO, TAG, message);
+    }
+
+    private void logError(String message, Throwable throwable) {
+        log(Log.ERROR, TAG, message, throwable);
     }
 }
