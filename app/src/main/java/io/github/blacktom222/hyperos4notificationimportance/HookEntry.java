@@ -84,10 +84,10 @@ public final class HookEntry extends XposedModule {
     }
 
     /**
-     * HyperOS 4 treats IMPORTANCE_DEFAULT as silent in its final status-icon pipeline. Promote
-     * DEFAULT to HIGH only while SystemUI calculates status-bar icons. The stored channel and
-     * ranking remain unchanged, so sound, heads-up and notification-shade behavior still use the
-     * real importance.
+     * HyperOS labels IMPORTANCE_LOW(2) as “中” and IMPORTANCE_MIN(1) as “低”. Promote LOW and
+     * DEFAULT to HIGH only while SystemUI calculates status-bar icons, so the visible “中” level
+     * is not discarded by Xiaomi's silent-icon gates. The stored channel and ranking remain
+     * unchanged, so sound, heads-up and notification-shade behavior still use the real importance.
      */
     private boolean hookStatusIconRanking(ClassLoader classLoader) {
         try {
@@ -98,9 +98,10 @@ public final class HookEntry extends XposedModule {
             return hookAllMethods(rankingClass, "getImportance", chain -> {
                 Object result = chain.proceed();
                 if (result instanceof Integer
-                        && ((Integer) result) == NotificationManager.IMPORTANCE_DEFAULT
+                        && ((Integer) result) >= NotificationManager.IMPORTANCE_LOW
+                        && ((Integer) result) <= NotificationManager.IMPORTANCE_DEFAULT
                         && calledFromStatusIconPipeline()) {
-                    logSystemUiMediumPromotionOnce();
+                    logSystemUiMediumPromotionOnce((Integer) result);
                     return NotificationManager.IMPORTANCE_HIGH;
                 }
                 return result;
@@ -209,12 +210,12 @@ public final class HookEntry extends XposedModule {
                 }
 
                 Integer importance = resolveImportance(chain.getArg(0), classLoader);
-                if (importance != null && importance <= NotificationManager.IMPORTANCE_LOW) {
+                if (importance != null && importance <= NotificationManager.IMPORTANCE_MIN) {
                     logSystemUiFilterOnce();
                     return false;
                 }
                 if (importance != null
-                        && importance >= NotificationManager.IMPORTANCE_DEFAULT
+                        && importance >= NotificationManager.IMPORTANCE_LOW
                         && !Boolean.TRUE.equals(result)
                         && Boolean.FALSE.equals(readBooleanField(
                                 chain.getThisObject(), "$showLowPriority"))) {
@@ -239,7 +240,7 @@ public final class HookEntry extends XposedModule {
             ArrayList<Object> filtered = new ArrayList<>(entries.size());
             for (Object listEntry : entries) {
                 Integer importance = resolveListEntryImportance(listEntry);
-                if (importance == null || importance > NotificationManager.IMPORTANCE_LOW) {
+                if (importance == null || importance > NotificationManager.IMPORTANCE_MIN) {
                     filtered.add(listEntry);
                 }
             }
@@ -293,7 +294,7 @@ public final class HookEntry extends XposedModule {
                 ArrayList<Object> filtered = new ArrayList<>(entries.size());
                 for (Object listEntry : entries) {
                     Integer importance = resolveListEntryImportance(listEntry);
-                    if (importance == null || importance > NotificationManager.IMPORTANCE_LOW) {
+                    if (importance == null || importance > NotificationManager.IMPORTANCE_MIN) {
                         filtered.add(listEntry);
                     }
                 }
@@ -735,21 +736,22 @@ public final class HookEntry extends XposedModule {
     private void logSystemUiFilterOnce() {
         if (!systemUiFilterLogged) {
             systemUiFilterLogged = true;
-            logInfo("已隐藏 LOW/MIN 通知的状态栏图标");
+            logInfo("已隐藏 MIN(1/界面‘低’)通知的状态栏图标");
         }
     }
 
     private void logSystemUiMediumRestoreOnce(int importance) {
         if (!systemUiMediumRestoreLogged) {
             systemUiMediumRestoreLogged = true;
-            logInfo("已恢复 DEFAULT 及以上通知的状态栏图标，importance=" + importance);
+            logInfo("已恢复 LOW(2/界面‘中’)及以上通知的状态栏图标，importance=" + importance);
         }
     }
 
-    private void logSystemUiMediumPromotionOnce() {
+    private void logSystemUiMediumPromotionOnce(int importance) {
         if (!systemUiMediumPromotionLogged) {
             systemUiMediumPromotionLogged = true;
-            logInfo("已在状态栏图标管线中将 DEFAULT(3) 按 HIGH(4) 处理");
+            logInfo("已在状态栏图标管线中将界面‘中’及以上按 HIGH(4) 处理，importance="
+                    + importance);
         }
     }
 
