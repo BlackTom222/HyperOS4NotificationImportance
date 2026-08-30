@@ -13,8 +13,8 @@ android {
         applicationId 'io.github.blacktom222.hyperos4notificationimportance'
         minSdk 26
         targetSdk 35
-        versionCode 7
-        versionName '1.0.6'
+        versionCode 8
+        versionName '1.1.0'
     }
 
     signingConfigs {
@@ -43,6 +43,12 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    packaging {
+        resources {
+            merges += ['META-INF/xposed/*']
+        }
+    }
+
     lint {
         abortOnError true
         checkReleaseBuilds true
@@ -50,5 +56,7 @@ android {
 }
 
 dependencies {
-    compileOnly 'de.robv.android.xposed:api:82'
+    compileOnly 'io.github.libxposed:api:102.0.0'
+    compileOnly 'androidx.annotation:annotation:1.10.0'
+    implementation 'io.github.libxposed:service:102.0.0'
 }
