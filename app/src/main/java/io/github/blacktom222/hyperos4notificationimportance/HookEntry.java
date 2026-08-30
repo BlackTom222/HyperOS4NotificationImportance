@@ -25,6 +25,8 @@ public final class HookEntry extends XposedModule {
     private static final String IMPORTANCE_KEY = "importance";
 
     private boolean systemUiFilterLogged;
+    private boolean systemUiMediumRestoreLogged;
+    private boolean systemUiSilentPolicyLogged;
     private Object notificationCollection;
 
     @Override
@@ -50,6 +52,7 @@ public final class HookEntry extends XposedModule {
     }
 
     private void hookSystemUiLowPriorityIcons(ClassLoader classLoader) {
+        boolean silentPolicyHooked = hookSilentIconPolicy(classLoader);
         boolean iconPredicateHooked = hookNotificationIconPredicate(classLoader);
         boolean pipelineHooked = hookStackCoordinator(classLoader);
         boolean legacyHooked = false;
@@ -61,6 +64,9 @@ public final class HookEntry extends XposedModule {
         if (iconPredicateHooked) {
             logInfo("已接管 System UI 新版通知图标过滤管线");
         }
+        if (silentPolicyHooked) {
+            logInfo("已接管 System UI 静默通知图标策略");
+        }
         if (pipelineHooked) {
             logInfo("已接管 System UI 的 StackCoordinator 兼容管线");
         }
@@ -69,6 +75,38 @@ public final class HookEntry extends XposedModule {
         } else if (!iconPredicateHooked && !pipelineHooked && !legacyHooked) {
             logInfo("未找到可用的 System UI 通知图标过滤入口");
         }
+    }
+
+    private boolean hookSilentIconPolicy(ClassLoader classLoader) {
+        XposedInterface.Hooker forceShowSilentIcons = chain -> {
+            if (chain.getArgs().isEmpty() || !(chain.getArg(0) instanceof Boolean)) {
+                return chain.proceed();
+            }
+
+            Object[] args = chain.getArgs().toArray();
+            args[0] = false;
+            logSilentPolicyOnce();
+            return chain.proceed(args);
+        };
+
+        boolean hooked = false;
+        hooked |= hookAllMethodsIfPresent(
+                "com.android.systemui.statusbar.domain.interactor."
+                        + "SilentNotificationStatusIconsVisibilityInteractor",
+                "setHideSilentStatusIcons",
+                classLoader,
+                forceShowSilentIcons);
+        hooked |= hookAllMethodsIfPresent(
+                "com.android.systemui.statusbar.notification.MiuiNotificationListener",
+                "onSilentStatusBarIconsVisibilityChanged",
+                classLoader,
+                forceShowSilentIcons);
+        hooked |= hookAllMethodsIfPresent(
+                "com.android.systemui.statusbar.NotificationListener",
+                "onSilentStatusBarIconsVisibilityChanged",
+                classLoader,
+                forceShowSilentIcons);
+        return hooked;
     }
 
     private boolean hookNotificationIconPredicate(ClassLoader classLoader) {
@@ -82,7 +120,7 @@ public final class HookEntry extends XposedModule {
 
             return hookAllMethods(predicateClass, "invoke", chain -> {
                 Object result = chain.proceed();
-                if (!Boolean.TRUE.equals(result) || chain.getArgs().isEmpty()) {
+                if (!(result instanceof Boolean) || chain.getArgs().isEmpty()) {
                     return result;
                 }
 
@@ -90,6 +128,14 @@ public final class HookEntry extends XposedModule {
                 if (importance != null && importance <= NotificationManager.IMPORTANCE_LOW) {
                     logSystemUiFilterOnce();
                     return false;
+                }
+                if (importance != null
+                        && importance >= NotificationManager.IMPORTANCE_DEFAULT
+                        && !Boolean.TRUE.equals(result)
+                        && Boolean.FALSE.equals(readBooleanField(
+                                chain.getThisObject(), "$showLowPriority"))) {
+                    logSystemUiMediumRestoreOnce(importance);
+                    return true;
                 }
                 return result;
             });
@@ -407,6 +453,7 @@ public final class HookEntry extends XposedModule {
                     int uid = ((Number) getFieldValue(fragment, "mUid")).intValue();
                     callMethod(backend, "updateChannel", packageName, uid, channel);
                     callMethod(fragment, "updateDependents", false);
+                    logInfo("已保存通知渠道重要性，importance=" + importance);
                     return true;
                 } catch (Throwable throwable) {
                     logError("保存通知重要性失败", throwable);
@@ -573,10 +620,36 @@ public final class HookEntry extends XposedModule {
         setFieldIfPresent(object, fieldName, Integer.valueOf(value));
     }
 
+    private Boolean readBooleanField(Object object, String fieldName) {
+        if (object == null) {
+            return null;
+        }
+        try {
+            Object value = getFieldValue(object, fieldName);
+            return value instanceof Boolean ? (Boolean) value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     private void logSystemUiFilterOnce() {
         if (!systemUiFilterLogged) {
             systemUiFilterLogged = true;
             logInfo("已隐藏 LOW/MIN 通知的状态栏图标");
+        }
+    }
+
+    private void logSystemUiMediumRestoreOnce(int importance) {
+        if (!systemUiMediumRestoreLogged) {
+            systemUiMediumRestoreLogged = true;
+            logInfo("已恢复 DEFAULT 及以上通知的状态栏图标，importance=" + importance);
+        }
+    }
+
+    private void logSilentPolicyOnce() {
+        if (!systemUiSilentPolicyLogged) {
+            systemUiSilentPolicyLogged = true;
+            logInfo("已允许静默通知进入状态栏图标候选列表");
         }
     }
 
