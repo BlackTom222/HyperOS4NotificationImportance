@@ -13,8 +13,8 @@ android {
         applicationId 'io.github.blacktom222.hyperos4notificationimportance'
         minSdk 26
         targetSdk 35
-        versionCode 9
-        versionName '1.1.1'
+        versionCode 10
+        versionName '1.1.2'
     }
 
     signingConfigs {

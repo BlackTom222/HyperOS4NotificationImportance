@@ -26,6 +26,7 @@ public final class HookEntry extends XposedModule {
 
     private boolean systemUiFilterLogged;
     private boolean systemUiMediumRestoreLogged;
+    private boolean systemUiMediumPromotionLogged;
     private boolean systemUiSilentPolicyLogged;
     private Object notificationCollection;
 
@@ -52,6 +53,7 @@ public final class HookEntry extends XposedModule {
     }
 
     private void hookSystemUiLowPriorityIcons(ClassLoader classLoader) {
+        boolean rankingHooked = hookStatusIconRanking(classLoader);
         boolean silentPolicyHooked = hookSilentIconPolicy(classLoader);
         boolean iconPredicateHooked = hookNotificationIconPredicate(classLoader);
         boolean pipelineHooked = hookStackCoordinator(classLoader);
@@ -64,6 +66,9 @@ public final class HookEntry extends XposedModule {
         if (iconPredicateHooked) {
             logInfo("已接管 System UI 新版通知图标过滤管线");
         }
+        if (rankingHooked) {
+            logInfo("已接管 System UI 状态栏图标重要性判定");
+        }
         if (silentPolicyHooked) {
             logInfo("已接管 System UI 静默通知图标策略");
         }
@@ -75,6 +80,47 @@ public final class HookEntry extends XposedModule {
         } else if (!iconPredicateHooked && !pipelineHooked && !legacyHooked) {
             logInfo("未找到可用的 System UI 通知图标过滤入口");
         }
+    }
+
+    /**
+     * HyperOS 4 treats IMPORTANCE_DEFAULT as silent in its final status-icon pipeline. Promote
+     * DEFAULT to HIGH only while SystemUI calculates status-bar icons. The stored channel and
+     * ranking remain unchanged, so sound, heads-up and notification-shade behavior still use the
+     * real importance.
+     */
+    private boolean hookStatusIconRanking(ClassLoader classLoader) {
+        try {
+            Class<?> rankingClass = Class.forName(
+                    "android.service.notification.NotificationListenerService$Ranking",
+                    false,
+                    classLoader);
+            return hookAllMethods(rankingClass, "getImportance", chain -> {
+                Object result = chain.proceed();
+                if (result instanceof Integer
+                        && ((Integer) result) == NotificationManager.IMPORTANCE_DEFAULT
+                        && calledFromStatusIconPipeline()) {
+                    logSystemUiMediumPromotionOnce();
+                    return NotificationManager.IMPORTANCE_HIGH;
+                }
+                return result;
+            });
+        } catch (Throwable throwable) {
+            logError("接管状态栏图标重要性判定失败", throwable);
+            return false;
+        }
+    }
+
+    private boolean calledFromStatusIconPipeline() {
+        for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
+            String className = element.getClassName();
+            if (className.startsWith("com.android.systemui.statusbar.notification.icon.")
+                    || className.contains(
+                    "statusbar.notification.collection.coordinator.StackCoordinator")
+                    || className.endsWith("NotificationIconAreaController")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean hookSilentIconPolicy(ClassLoader classLoader) {
@@ -643,6 +689,13 @@ public final class HookEntry extends XposedModule {
         if (!systemUiMediumRestoreLogged) {
             systemUiMediumRestoreLogged = true;
             logInfo("已恢复 DEFAULT 及以上通知的状态栏图标，importance=" + importance);
+        }
+    }
+
+    private void logSystemUiMediumPromotionOnce() {
+        if (!systemUiMediumPromotionLogged) {
+            systemUiMediumPromotionLogged = true;
+            logInfo("已在状态栏图标管线中将 DEFAULT(3) 按 HIGH(4) 处理");
         }
     }
 
