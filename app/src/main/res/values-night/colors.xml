@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="miuix_accent">#5C9DFF</color>
+    <color name="page_background">#0F0F0F</color>
+    <color name="card_background">#1D1D1D</color>
+    <color name="text_primary">#F4F4F4</color>
+    <color name="text_secondary">#A0A0A0</color>
+    <color name="divider">#20FFFFFF</color>
+    <color name="status_success">#4CC98D</color>
+    <color name="status_success_soft">#183B2C</color>
+    <color name="status_warning">#FFB84D</color>
+    <color name="status_warning_soft">#463316</color>
+    <color name="status_error">#FF7474</color>
+    <color name="status_error_soft">#472323</color>
+</resources>
