@@ -23,10 +23,10 @@ public final class MainActivity extends AppCompatActivity
     private static final String SETTINGS_PACKAGE = "com.android.settings";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
     private static final String ROOT_RESTART_COMMAND =
-            "[ \"$(id -u)\" = \"0\" ] || exit 126; "
+            "[ "$(id -u)" = "0" ] || exit 126; "
                     + "am force-stop com.android.settings; "
                     + "systemui_pid=$(pidof com.android.systemui); "
-                    + "if [ -n \"$systemui_pid\" ]; then kill -TERM $systemui_pid; fi; "
+                    + "if [ -n "$systemui_pid" ]; then kill -TERM $systemui_pid; fi; "
                     + "exit 0";
 
     private TextView activationStatus;
@@ -59,7 +59,7 @@ public final class MainActivity extends AppCompatActivity
     }
 
     @Override
-    protected void onStop() {
+    public void onStop() {
         ModuleApplication.removeServiceStateListener(this);
         super.onStop();
     }
