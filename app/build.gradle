@@ -11,10 +11,10 @@ android {
 
     defaultConfig {
         applicationId 'io.github.blacktom222.hyperos4notificationimportance'
-        minSdk 26
+        minSdk 33
         targetSdk 35
-        versionCode 12
-        versionName '1.1.4'
+        versionCode 13
+        versionName '1.2.0'
     }
 
     signingConfigs {
@@ -59,4 +59,5 @@ dependencies {
     compileOnly 'io.github.libxposed:api:102.0.0'
     compileOnly 'androidx.annotation:annotation:1.10.0'
     implementation 'io.github.libxposed:service:102.0.0'
+    implementation 'fan.miuix:appcompat:1.0.13.0'
 }

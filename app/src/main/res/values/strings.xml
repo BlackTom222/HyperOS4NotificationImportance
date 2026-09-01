@@ -9,7 +9,7 @@
     <string name="activation_inactive">模块未激活</string>
     <string name="activation_inactive_details">请在 LSPosed 中启用模块，并确认当前框架支持现代 API 102。</string>
     <string name="activation_service_error">读取 LSPosed 状态失败</string>
-    <string name="activation_details">框架：%1$s %2$s\n%3$s\n运行中的作用域进程：%4$s</string>
+    <string name="activation_details">%1$s %2$s · API 102\n运行进程：%4$s</string>
     <string name="scope_state">设置：%1$s　系统界面：%2$s</string>
     <string name="scope_enabled">已启用</string>
     <string name="scope_disabled">未启用</string>
@@ -19,5 +19,22 @@
     <string name="root_requesting">正在请求 Root 并重启“设置”和“系统界面”…</string>
     <string name="restart_scope_success">作用域已重启，请重新打开设置进行测试</string>
     <string name="restart_scope_failed">重启失败：请检查 Root 授权或在 Root 管理器中重新授权</string>
-    <string name="instructions">使用方法：\n\n1. 在 LSPosed 中启用本模块\n2. 作用域同时勾选“设置（com.android.settings）”和“系统界面（com.android.systemui）”\n3. 返回本应用检查激活和作用域状态\n4. 点击上方按钮，授予 Root 权限后自动重启两个作用域\n5. 进入应用通知设置并打开具体通知类别，即可调整通知重要性\n6. “低”或“最低”会隐藏状态栏图标；“中”及以上保持显示\n\n模块不联网、不读取个人数据。Root 仅用于终止并由系统重新拉起作用域进程。</string>
+    <string name="page_subtitle">恢复通知重要性设置 · API 102</string>
+    <string name="section_module_status">模块状态</string>
+    <string name="section_scope">作用域</string>
+    <string name="section_restart">应用更改</string>
+    <string name="section_rules">状态栏图标规则</string>
+    <string name="section_help">使用说明</string>
+    <string name="settings_scope_name">设置</string>
+    <string name="settings_scope_package">com.android.settings</string>
+    <string name="systemui_scope_name">系统界面</string>
+    <string name="systemui_scope_package">com.android.systemui</string>
+    <string name="restart_scope_summary">授予 Root 权限后重启“设置”和“系统界面”，无需重启手机。</string>
+    <string name="rule_urgent">紧急 · 4</string>
+    <string name="rule_high">高 · 3</string>
+    <string name="rule_medium">中 · 2</string>
+    <string name="rule_low">低 · 1</string>
+    <string name="rule_show">显示图标</string>
+    <string name="rule_hide">隐藏图标</string>
+    <string name="instructions">1. 在 LSPosed 中启用模块，并勾选“设置”和“系统界面”。\n\n2. 点击“授予 Root 权限并重启作用域”。\n\n3. 前往应用的具体通知类别页面调整重要性。\n\n模块不联网、不读取个人数据；Root 仅用于重启两个作用域进程。</string>
 </resources>

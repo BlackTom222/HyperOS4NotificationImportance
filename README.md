@@ -11,7 +11,9 @@
 5. 打开“设置 → 通知与状态栏 → 应用通知管理 → 应用 → 具体通知类别”，调整通知重要性。
 6. HyperOS 四档对应关系为“紧急(4) / 高(3) / 中(2) / 低(1)”。选择“低”后，通知卡片仍会保留，但状态栏图标会由 System UI 过滤；“中”及以上保持显示图标。
 
-v1.1.4 使用现代 libxposed API 102，在 System UI 创建图标前接管 `NotificationIconsInteractor` / `StackCoordinator`。模块会先允许静默通知进入状态栏图标候选列表，再根据最终 Ranking 精确判断：仅排除 HyperOS 界面“低”对应的 `MIN(1)`，保留界面“中”对应的 `LOW(2)`。同时接管新版 `StatusBarNotificationIconsInteractor` 的图标来源；不修改通知通道的实际重要性，不会额外开启声音或悬浮通知。
+v1.2.0 使用现代 libxposed API 102，在 System UI 创建图标前接管 `NotificationIconsInteractor` / `StackCoordinator`。模块会先允许静默通知进入状态栏图标候选列表，再根据最终 Ranking 精确判断：仅排除 HyperOS 界面“低”对应的 `MIN(1)`，保留界面“中”对应的 `LOW(2)`。同时接管新版 `StatusBarNotificationIconsInteractor` 的图标来源；不修改通知通道的实际重要性，不会额外开启声音或悬浮通知。
+
+模块应用界面自 v1.2.0 起使用 HyperCeiler 同款 `fan.miuix` 组件库，提供 MIUIX 大标题、圆角状态卡片、作用域状态、图标规则说明、深色模式以及 Root 重启操作区。
 
 模块应用首页通过 libxposed Service 显示激活状态、框架版本、API 版本、作用域以及运行中的目标进程。点击“授予 Root 权限并重启作用域”会请求一次 Root 权限，随后停止“设置”和“系统界面”进程，由系统自动重新拉起并加载新 Hook；Root 不用于其他操作。
 

@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.blacktom222.hyperos4notificationimportance;
 
-import android.app.Activity;
-import android.graphics.Color;
 import android.os.Bundle;
-import android.view.Gravity;
-import android.view.ViewGroup;
+import android.view.HapticFeedbackConstants;
+import android.view.View;
 import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -20,8 +16,9 @@ import java.util.concurrent.TimeUnit;
 
 import io.github.libxposed.service.HookedTarget;
 import io.github.libxposed.service.XposedService;
+import fan.appcompat.app.AppCompatActivity;
 
-public final class MainActivity extends Activity
+public final class MainActivity extends AppCompatActivity
         implements ModuleApplication.ServiceStateListener {
     private static final String SETTINGS_PACKAGE = "com.android.settings";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
@@ -34,68 +31,25 @@ public final class MainActivity extends Activity
 
     private TextView activationStatus;
     private TextView frameworkDetails;
+    private TextView settingsScopeStatus;
+    private TextView systemUiScopeStatus;
+    private View activationIndicator;
     private TextView rootStatus;
     private Button restartButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
-        int padding = dp(24);
-        int gap = dp(14);
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(padding, padding, padding, padding);
-
-        TextView title = new TextView(this);
-        title.setText(R.string.app_name);
-        title.setTextSize(24);
-        title.setTextColor(Color.BLACK);
-        title.setGravity(Gravity.CENTER);
-        root.addView(title, matchWrap());
-
-        activationStatus = new TextView(this);
-        activationStatus.setText(R.string.activation_checking);
-        activationStatus.setTextSize(18);
-        activationStatus.setTextColor(Color.rgb(120, 90, 0));
-        activationStatus.setGravity(Gravity.CENTER);
-        addWithTopMargin(root, activationStatus, gap);
-
-        frameworkDetails = new TextView(this);
-        frameworkDetails.setText(R.string.activation_waiting_details);
-        frameworkDetails.setTextSize(14);
-        frameworkDetails.setTextColor(Color.DKGRAY);
-        frameworkDetails.setGravity(Gravity.CENTER);
-        frameworkDetails.setLineSpacing(0, 1.2f);
-        addWithTopMargin(root, frameworkDetails, gap);
-
-        restartButton = new Button(this);
-        restartButton.setText(R.string.restart_scope_with_root);
-        restartButton.setAllCaps(false);
+        activationStatus = findViewById(R.id.activation_status);
+        frameworkDetails = findViewById(R.id.framework_details);
+        settingsScopeStatus = findViewById(R.id.settings_scope_status);
+        systemUiScopeStatus = findViewById(R.id.systemui_scope_status);
+        activationIndicator = findViewById(R.id.activation_indicator);
+        rootStatus = findViewById(R.id.root_status);
+        restartButton = findViewById(R.id.restart_button);
         restartButton.setOnClickListener(view -> restartScopeWithRoot());
-        addWithTopMargin(root, restartButton, gap * 2);
-
-        rootStatus = new TextView(this);
-        rootStatus.setText(R.string.root_not_requested);
-        rootStatus.setTextSize(14);
-        rootStatus.setTextColor(Color.DKGRAY);
-        rootStatus.setGravity(Gravity.CENTER);
-        addWithTopMargin(root, rootStatus, gap);
-
-        TextView instructions = new TextView(this);
-        instructions.setText(R.string.instructions);
-        instructions.setTextSize(16);
-        instructions.setTextColor(Color.DKGRAY);
-        instructions.setLineSpacing(0, 1.25f);
-        addWithTopMargin(root, instructions, gap * 2);
-
-        ScrollView scrollView = new ScrollView(this);
-        scrollView.addView(root, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-        setContentView(scrollView);
     }
 
     @Override
@@ -105,7 +59,7 @@ public final class MainActivity extends Activity
     }
 
     @Override
-    protected void onStop() {
+    public void onStop() {
         ModuleApplication.removeServiceStateListener(this);
         super.onStop();
     }
@@ -118,8 +72,10 @@ public final class MainActivity extends Activity
     private void updateActivationState(@Nullable XposedService service) {
         if (service == null) {
             activationStatus.setText(R.string.activation_inactive);
-            activationStatus.setTextColor(Color.rgb(190, 45, 45));
+            setActivationAppearance(R.color.status_error, R.drawable.bg_status_error);
             frameworkDetails.setText(R.string.activation_inactive_details);
+            updateScopeStatus(settingsScopeStatus, false);
+            updateScopeStatus(systemUiScopeStatus, false);
             return;
         }
 
@@ -141,9 +97,13 @@ public final class MainActivity extends Activity
                             ? R.string.activation_active
                             : R.string.activation_scope_incomplete,
                     service.getApiVersion()));
-            activationStatus.setTextColor(settingsScoped && systemUiScoped
-                    ? Color.rgb(0, 125, 80)
-                    : Color.rgb(190, 105, 0));
+            setActivationAppearance(
+                    settingsScoped && systemUiScoped ? R.color.status_success : R.color.status_warning,
+                    settingsScoped && systemUiScoped
+                            ? R.drawable.bg_status_success
+                            : R.drawable.bg_status_warning);
+            updateScopeStatus(settingsScopeStatus, settingsScoped);
+            updateScopeStatus(systemUiScopeStatus, systemUiScoped);
             frameworkDetails.setText(getString(
                     R.string.activation_details,
                     service.getFrameworkName(),
@@ -154,9 +114,21 @@ public final class MainActivity extends Activity
                             : String.join("、", runningProcesses)));
         } catch (Throwable throwable) {
             activationStatus.setText(R.string.activation_service_error);
-            activationStatus.setTextColor(Color.rgb(190, 45, 45));
+            setActivationAppearance(R.color.status_error, R.drawable.bg_status_error);
             frameworkDetails.setText(throwable.getClass().getSimpleName());
+            updateScopeStatus(settingsScopeStatus, false);
+            updateScopeStatus(systemUiScopeStatus, false);
         }
+    }
+
+    private void setActivationAppearance(int textColor, int indicatorBackground) {
+        activationStatus.setTextColor(getColor(textColor));
+        activationIndicator.setBackgroundResource(indicatorBackground);
+    }
+
+    private void updateScopeStatus(TextView view, boolean enabled) {
+        view.setText(enabled ? R.string.scope_enabled : R.string.scope_disabled);
+        view.setTextColor(getColor(enabled ? R.color.status_success : R.color.status_error));
     }
 
     private String formatScope(boolean settingsScoped, boolean systemUiScoped) {
@@ -169,7 +141,7 @@ public final class MainActivity extends Activity
     private void restartScopeWithRoot() {
         restartButton.setEnabled(false);
         rootStatus.setText(R.string.root_requesting);
-        rootStatus.setTextColor(Color.rgb(120, 90, 0));
+        rootStatus.setTextColor(getColor(R.color.status_warning));
 
         Thread worker = new Thread(() -> {
             boolean success = false;
@@ -189,12 +161,15 @@ public final class MainActivity extends Activity
             boolean restartSucceeded = success;
             runOnUiThread(() -> {
                 restartButton.setEnabled(true);
+                restartButton.performHapticFeedback(restartSucceeded
+                        ? HapticFeedbackConstants.CONFIRM
+                        : HapticFeedbackConstants.REJECT);
                 rootStatus.setText(restartSucceeded
                         ? R.string.restart_scope_success
                         : R.string.restart_scope_failed);
-                rootStatus.setTextColor(restartSucceeded
-                        ? Color.rgb(0, 125, 80)
-                        : Color.rgb(190, 45, 45));
+                rootStatus.setTextColor(getColor(restartSucceeded
+                        ? R.color.status_success
+                        : R.color.status_error));
                 Toast.makeText(
                         this,
                         restartSucceeded
@@ -204,21 +179,5 @@ public final class MainActivity extends Activity
             });
         }, "scope-root-restart");
         worker.start();
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private LinearLayout.LayoutParams matchWrap() {
-        return new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-    }
-
-    private void addWithTopMargin(LinearLayout parent, TextView view, int margin) {
-        LinearLayout.LayoutParams params = matchWrap();
-        params.topMargin = margin;
-        parent.addView(view, params);
     }
 }
