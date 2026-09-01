@@ -31,7 +31,7 @@ jobs:
       - name: Install Android SDK platform
         run: |
           sdkmanager "cmdline-tools;latest"
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest-2/bin/sdkmanager" "platforms;android-37" "build-tools;37.0.0" --channel=3
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest-2/bin/sdkmanager" "platforms;android-37.0" "build-tools;37.0.0" --channel=3
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -72,5 +72,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.2.0 >/dev/null 2>&1 || gh release create v1.2.0 --title "v1.2.0" --notes "应用界面迁移到 MIUIX 1.0.13.0，采用 HyperOS 风格的大标题、圆角卡片、作用域状态、图标规则和 Root 操作区。保留 API 102、固定签名及 v1.1.4 的通知图标修复，可直接覆盖安装。"
-          gh release upload v1.2.0 artifacts/*.apk --clobber
+          gh release view v1.2.1 >/dev/null 2>&1 || gh release create v1.2.1 --title "v1.2.1" --notes "首页更新为仪表盘布局：激活卡会根据 LSPosed 服务与两个作用域状态实时切换绿/黄/红配色，并集中显示 Android、模块、LSPosed 与 Root 重启信息。保留 API 102、固定签名及“中”显示图标、“低”隐藏图标的修复，可直接覆盖安装 v1.2.0。"
+          gh release upload v1.2.1 artifacts/*.apk --clobber
