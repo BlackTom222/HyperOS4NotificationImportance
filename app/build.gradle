@@ -9,6 +9,10 @@ android {
     namespace 'io.github.blacktom222.hyperos4notificationimportance'
     compileSdk 37
 
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId 'io.github.blacktom222.hyperos4notificationimportance'
         minSdk 33
