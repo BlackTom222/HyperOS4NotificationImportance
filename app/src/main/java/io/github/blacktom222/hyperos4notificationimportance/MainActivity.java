@@ -2,6 +2,7 @@
 package io.github.blacktom222.hyperos4notificationimportance;
 
 import android.os.Bundle;
+import android.os.Build;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.widget.Button;
@@ -33,7 +34,10 @@ public final class MainActivity extends AppCompatActivity
     private TextView frameworkDetails;
     private TextView settingsScopeStatus;
     private TextView systemUiScopeStatus;
-    private View activationIndicator;
+    private View activationCard;
+    private TextView activationCardSummary;
+    private TextView androidVersion;
+    private TextView appVersion;
     private TextView rootStatus;
     private Button restartButton;
 
@@ -46,7 +50,14 @@ public final class MainActivity extends AppCompatActivity
         frameworkDetails = findViewById(R.id.framework_details);
         settingsScopeStatus = findViewById(R.id.settings_scope_status);
         systemUiScopeStatus = findViewById(R.id.systemui_scope_status);
-        activationIndicator = findViewById(R.id.activation_indicator);
+        activationCard = findViewById(R.id.activation_card);
+        activationCardSummary = findViewById(R.id.activation_card_summary);
+        androidVersion = findViewById(R.id.android_version);
+        androidVersion.setText(getString(
+                R.string.android_version_format, Build.VERSION.RELEASE, Build.VERSION.SDK_INT));
+        appVersion = findViewById(R.id.app_version);
+        appVersion.setText(getString(
+                R.string.app_version_format, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE));
         rootStatus = findViewById(R.id.root_status);
         restartButton = findViewById(R.id.restart_button);
         restartButton.setOnClickListener(view -> restartScopeWithRoot());
@@ -72,7 +83,8 @@ public final class MainActivity extends AppCompatActivity
     private void updateActivationState(@Nullable XposedService service) {
         if (service == null) {
             activationStatus.setText(R.string.activation_inactive);
-            setActivationAppearance(R.color.status_error, R.drawable.bg_status_error);
+            activationCardSummary.setText(R.string.activation_inactive_details);
+            setActivationAppearance(R.color.status_error, R.drawable.bg_dashboard_error);
             frameworkDetails.setText(R.string.activation_inactive_details);
             updateScopeStatus(settingsScopeStatus, false);
             updateScopeStatus(systemUiScopeStatus, false);
@@ -100,8 +112,11 @@ public final class MainActivity extends AppCompatActivity
             setActivationAppearance(
                     settingsScoped && systemUiScoped ? R.color.status_success : R.color.status_warning,
                     settingsScoped && systemUiScoped
-                            ? R.drawable.bg_status_success
-                            : R.drawable.bg_status_warning);
+                            ? R.drawable.bg_dashboard_active
+                            : R.drawable.bg_dashboard_warning);
+            activationCardSummary.setText(settingsScoped && systemUiScoped
+                    ? R.string.activation_card_connected
+                    : R.string.activation_card_incomplete);
             updateScopeStatus(settingsScopeStatus, settingsScoped);
             updateScopeStatus(systemUiScopeStatus, systemUiScoped);
             frameworkDetails.setText(getString(
@@ -114,16 +129,18 @@ public final class MainActivity extends AppCompatActivity
                             : String.join("、", runningProcesses)));
         } catch (Throwable throwable) {
             activationStatus.setText(R.string.activation_service_error);
-            setActivationAppearance(R.color.status_error, R.drawable.bg_status_error);
+            activationCardSummary.setText(R.string.activation_service_error);
+            setActivationAppearance(R.color.status_error, R.drawable.bg_dashboard_error);
             frameworkDetails.setText(throwable.getClass().getSimpleName());
             updateScopeStatus(settingsScopeStatus, false);
             updateScopeStatus(systemUiScopeStatus, false);
         }
     }
 
-    private void setActivationAppearance(int textColor, int indicatorBackground) {
-        activationStatus.setTextColor(getColor(textColor));
-        activationIndicator.setBackgroundResource(indicatorBackground);
+    private void setActivationAppearance(int summaryColor, int cardBackground) {
+        activationStatus.setTextColor(getColor(R.color.text_primary));
+        activationCardSummary.setTextColor(getColor(summaryColor));
+        activationCard.setBackgroundResource(cardBackground);
     }
 
     private void updateScopeStatus(TextView view, boolean enabled) {
