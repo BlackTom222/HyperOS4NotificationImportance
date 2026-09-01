@@ -28,4 +28,16 @@
         <item name="android:textSize">14sp</item>
         <item name="android:lineSpacingMultiplier">1.15</item>
     </style>
+
+    <style name="DashboardLabel">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="DashboardValue">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
 </resources>
