@@ -72,5 +72,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.2.1 >/dev/null 2>&1 || gh release create v1.2.1 --title "v1.2.1" --notes "首页更新为仪表盘布局：激活卡会根据 LSPosed 服务与两个作用域状态实时切换绿/黄/红配色，并集中显示 Android、模块、LSPosed 与 Root 重启信息。保留 API 102、固定签名及“中”显示图标、“低”隐藏图标的修复，可直接覆盖安装 v1.2.0。"
-          gh release upload v1.2.1 artifacts/*.apk --clobber
+          gh release view v1.2.2 >/dev/null 2>&1 || gh release create v1.2.2 --target "$GITHUB_SHA" --title "v1.2.2" --notes "精简模块首页：移除无功能图标和底部导航，合并通知规则；隐藏滚动条但保留正常滑动。模块信息和 Root 重启收纳到可展开区域，重启前增加确认提示。优化深色模式和文字对比度；保留 API 102、固定签名及原有通知 Hook 逻辑，可覆盖安装 v1.2.1。"
+          gh release upload v1.2.2 artifacts/*.apk --clobber

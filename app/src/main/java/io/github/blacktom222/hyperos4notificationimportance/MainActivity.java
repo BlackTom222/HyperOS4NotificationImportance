@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.blacktom222.hyperos4notificationimportance;
 
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.os.Build;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 
@@ -23,6 +23,7 @@ public final class MainActivity extends AppCompatActivity
         implements ModuleApplication.ServiceStateListener {
     private static final String SETTINGS_PACKAGE = "com.android.settings";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
+    private static final String STATE_DETAILS_EXPANDED = "details_expanded";
     private static final String ROOT_RESTART_COMMAND =
             "[ \"$(id -u)\" = \"0\" ] || exit 126; "
                     + "am force-stop com.android.settings; "
@@ -40,6 +41,9 @@ public final class MainActivity extends AppCompatActivity
     private TextView appVersion;
     private TextView rootStatus;
     private Button restartButton;
+    private Button detailsToggle;
+    private View detailsPanel;
+    private boolean restartInProgress;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,7 +64,24 @@ public final class MainActivity extends AppCompatActivity
                 R.string.app_version_format, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE));
         rootStatus = findViewById(R.id.root_status);
         restartButton = findViewById(R.id.restart_button);
-        restartButton.setOnClickListener(view -> restartScopeWithRoot());
+        restartButton.setOnClickListener(view -> confirmRestart());
+        detailsToggle = findViewById(R.id.details_toggle);
+        detailsPanel = findViewById(R.id.details_panel);
+        setDetailsExpanded(savedInstanceState != null
+                && savedInstanceState.getBoolean(STATE_DETAILS_EXPANDED));
+        detailsToggle.setOnClickListener(view ->
+                setDetailsExpanded(detailsPanel.getVisibility() != View.VISIBLE));
+    }
+
+    private void setDetailsExpanded(boolean expanded) {
+        detailsPanel.setVisibility(expanded ? View.VISIBLE : View.GONE);
+        detailsToggle.setText(expanded ? R.string.details_collapse : R.string.details_expand);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putBoolean(STATE_DETAILS_EXPANDED, detailsPanel.getVisibility() == View.VISIBLE);
+        super.onSaveInstanceState(outState);
     }
 
     @Override
@@ -81,13 +102,16 @@ public final class MainActivity extends AppCompatActivity
     }
 
     private void updateActivationState(@Nullable XposedService service) {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
         if (service == null) {
             activationStatus.setText(R.string.activation_inactive);
             activationCardSummary.setText(R.string.activation_inactive_details);
             setActivationAppearance(R.color.status_error, R.drawable.bg_dashboard_error);
-            frameworkDetails.setText(R.string.activation_inactive_details);
-            updateScopeStatus(settingsScopeStatus, false);
-            updateScopeStatus(systemUiScopeStatus, false);
+            frameworkDetails.setText(R.string.framework_disconnected);
+            updateScopeStatus(settingsScopeStatus, null);
+            updateScopeStatus(systemUiScopeStatus, null);
             return;
         }
 
@@ -104,11 +128,10 @@ public final class MainActivity extends AppCompatActivity
                 }
             }
 
-            activationStatus.setText(getString(
+            activationStatus.setText(
                     settingsScoped && systemUiScoped
                             ? R.string.activation_active
-                            : R.string.activation_scope_incomplete,
-                    service.getApiVersion()));
+                            : R.string.activation_scope_incomplete);
             setActivationAppearance(
                     settingsScoped && systemUiScoped ? R.color.status_success : R.color.status_warning,
                     settingsScoped && systemUiScoped
@@ -123,7 +146,7 @@ public final class MainActivity extends AppCompatActivity
                     R.string.activation_details,
                     service.getFrameworkName(),
                     service.getFrameworkVersion(),
-                    formatScope(settingsScoped, systemUiScoped),
+                    service.getApiVersion(),
                     runningProcesses.isEmpty()
                             ? getString(R.string.no_running_scope_process)
                             : String.join("、", runningProcesses)));
@@ -132,8 +155,8 @@ public final class MainActivity extends AppCompatActivity
             activationCardSummary.setText(R.string.activation_service_error);
             setActivationAppearance(R.color.status_error, R.drawable.bg_dashboard_error);
             frameworkDetails.setText(throwable.getClass().getSimpleName());
-            updateScopeStatus(settingsScopeStatus, false);
-            updateScopeStatus(systemUiScopeStatus, false);
+            updateScopeStatus(settingsScopeStatus, null);
+            updateScopeStatus(systemUiScopeStatus, null);
         }
     }
 
@@ -143,19 +166,34 @@ public final class MainActivity extends AppCompatActivity
         activationCard.setBackgroundResource(cardBackground);
     }
 
-    private void updateScopeStatus(TextView view, boolean enabled) {
+    private void updateScopeStatus(TextView view, @Nullable Boolean enabled) {
+        if (enabled == null) {
+            view.setText(R.string.scope_unknown);
+            view.setTextColor(getColor(R.color.text_secondary));
+            return;
+        }
         view.setText(enabled ? R.string.scope_enabled : R.string.scope_disabled);
         view.setTextColor(getColor(enabled ? R.color.status_success : R.color.status_error));
     }
 
-    private String formatScope(boolean settingsScoped, boolean systemUiScoped) {
-        return getString(
-                R.string.scope_state,
-                settingsScoped ? getString(R.string.scope_enabled) : getString(R.string.scope_disabled),
-                systemUiScoped ? getString(R.string.scope_enabled) : getString(R.string.scope_disabled));
+    private void confirmRestart() {
+        if (restartInProgress) {
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.restart_confirm_title)
+                .setMessage(R.string.restart_confirm_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.restart_confirm_action,
+                        (dialog, which) -> restartScopeWithRoot())
+                .show();
     }
 
     private void restartScopeWithRoot() {
+        if (restartInProgress) {
+            return;
+        }
+        restartInProgress = true;
         restartButton.setEnabled(false);
         rootStatus.setText(R.string.root_requesting);
         rootStatus.setTextColor(getColor(R.color.status_warning));
@@ -177,6 +215,10 @@ public final class MainActivity extends AppCompatActivity
 
             boolean restartSucceeded = success;
             runOnUiThread(() -> {
+                restartInProgress = false;
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
                 restartButton.setEnabled(true);
                 restartButton.performHapticFeedback(restartSucceeded
                         ? HapticFeedbackConstants.CONFIRM
@@ -187,12 +229,6 @@ public final class MainActivity extends AppCompatActivity
                 rootStatus.setTextColor(getColor(restartSucceeded
                         ? R.color.status_success
                         : R.color.status_error));
-                Toast.makeText(
-                        this,
-                        restartSucceeded
-                                ? R.string.restart_scope_success
-                                : R.string.restart_scope_failed,
-                        Toast.LENGTH_LONG).show();
             });
         }, "scope-root-restart");
         worker.start();

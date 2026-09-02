@@ -4,12 +4,12 @@
     <color name="page_background">#F7F7F7</color>
     <color name="card_background">#FFFFFF</color>
     <color name="text_primary">#191919</color>
-    <color name="text_secondary">#7A7A7A</color>
+    <color name="text_secondary">#666666</color>
     <color name="divider">#12000000</color>
-    <color name="status_success">#159B61</color>
+    <color name="status_success">#117647</color>
     <color name="status_success_soft">#E5F6EE</color>
-    <color name="status_warning">#D98000</color>
+    <color name="status_warning">#9A5700</color>
     <color name="status_warning_soft">#FFF2D9</color>
-    <color name="status_error">#D64242</color>
+    <color name="status_error">#B72E2E</color>
     <color name="status_error_soft">#FCE8E8</color>
 </resources>
