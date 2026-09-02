@@ -32,6 +32,9 @@ $root = $layout.DocumentElement
 if ($root.Name -ne 'ScrollView' -or $root.GetAttribute('scrollbars', $androidNs) -ne 'none') {
     throw 'The page must remain scrollable with no visible scrollbars.'
 }
+if ($root.GetAttribute('clipToPadding', $androidNs) -ne 'true') {
+    throw 'Scrolled content must stay out of the system bar insets.'
+}
 $buttons = @($layout.SelectNodes('//Button'))
 $content = $root.SelectSingleNode('LinearLayout')
 if ($content.GetAttribute('paddingStart', $androidNs) -ne '@dimen/page_padding' -or
