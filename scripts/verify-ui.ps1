@@ -33,6 +33,11 @@ if ($root.Name -ne 'ScrollView' -or $root.GetAttribute('scrollbars', $androidNs)
     throw 'The page must remain scrollable with no visible scrollbars.'
 }
 $buttons = @($layout.SelectNodes('//Button'))
+$content = $root.SelectSingleNode('LinearLayout')
+if ($content.GetAttribute('paddingStart', $androidNs) -ne '@dimen/page_padding' -or
+    $content.GetAttribute('paddingEnd', $androidNs) -ne '@dimen/page_padding') {
+    throw 'Content padding must be inside the inset-handling ScrollView.'
+}
 if ($buttons.Count -ne 2) { throw 'Only the details toggle and root restart buttons are expected.' }
 $ids = @{}
 foreach ($node in $layout.SelectNodes('//*')) {

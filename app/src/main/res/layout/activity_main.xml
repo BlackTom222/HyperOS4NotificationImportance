@@ -4,10 +4,11 @@
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:background="@color/page_background" android:fitsSystemWindows="true"
     android:fillViewport="true" android:clipToPadding="false"
-    android:overScrollMode="never" android:scrollbars="none" android:requiresFadingEdge="none"
-    android:paddingStart="@dimen/page_padding" android:paddingEnd="@dimen/page_padding"
-    android:paddingTop="24dp" android:paddingBottom="24dp">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+    android:overScrollMode="never" android:scrollbars="none" android:requiresFadingEdge="none">
+    <!-- Keep content spacing separate from the system insets applied to ScrollView. -->
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
+        android:paddingStart="@dimen/page_padding" android:paddingEnd="@dimen/page_padding"
+        android:paddingTop="24dp" android:paddingBottom="24dp">
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:accessibilityHeading="true" android:fontFamily="sans-serif-medium"
             android:text="@string/dashboard_title" android:textColor="@color/text_primary" android:textSize="28sp" />
